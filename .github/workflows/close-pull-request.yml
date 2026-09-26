@@ -1,0 +1,25 @@
+name: Close pull request
+
+# This repository is a read-only copy of packages/xtr-clock in xterr/python-xtr.
+# pull_request_target, because a fork's pull_request run gets a read-only token and
+# could not close anything. Safe here: nothing is checked out or run from the pull
+# request, and its number reaches the shell only through an environment variable.
+on:
+  pull_request_target: # zizmor: ignore[dangerous-triggers]
+    types: [opened, reopened]
+
+permissions: {}
+
+jobs:
+  close:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write # to comment on and close the pull request
+    steps:
+      - run: gh pr close "$NUMBER" --repo "$GITHUB_REPOSITORY" --comment "$COMMENT"
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NUMBER: ${{ github.event.pull_request.number }}
+          COMMENT: >-
+            Thank you! This repository is a read-only copy of `packages/xtr-cache` in
+            https://github.com/xterr/python-xtr. Please send your pull request there.
