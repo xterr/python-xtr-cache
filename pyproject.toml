@@ -1,7 +1,7 @@
 [project]
 name = "xtr-cache"
 version = "1.1.0"
-description = "Cache adapter"
+description = "Cache pools in memory, in files, in Redis, chained or tag-aware, with stampede protection."
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
@@ -9,21 +9,38 @@ license-files = ["LICENSE"]
 authors = [
     { name = "Razvan Ceana", email = "razvan@ceana.ro" }
 ]
-keywords = ["cache"]
+keywords = ["cache", "redis", "stampede", "tags", "asyncio"]
 classifiers = [
     "Development Status :: 3 - Alpha",
+    "Framework :: AsyncIO",
     "Intended Audience :: Developers",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
-    "Topic :: Software Development :: Testing",
     "Typing :: Typed",
 ]
-dependencies = []
+dependencies = [
+    "typing-extensions>=4.4",
+    "xtr-cache-contracts>=1.0,<2",
+    "xtr-clock>=1.0,<2",
+    "xtr-lock>=1.0,<2",
+    "xtr-logging-contracts>=1.0,<2",
+]
 
+[project.optional-dependencies]
+redis = [
+    "redis>=5.0",
+]
+sodium = [
+    "pynacl>=1.5",
+]
 di = [
     "xtr-dependency-injection>=1.0,<2",
+    "xtr-service-contracts>=1.0,<2",
+]
+console = [
+    "xtr-console>=1.0,<2",
 ]
 
 [dependency-groups]
@@ -32,8 +49,14 @@ dev = [
     "ruff>=0.8",
     "pytest>=8",
     "pytest-cov>=5",
+    "anyio>=4.0",
     "ty>=0.0.83",
+    "pynacl>=1.5",
+    "redis>=5.0",
+    "xtr-console>=1.0,<2",
     "xtr-dependency-injection>=1.0,<2",
+    "xtr-logging>=1.0,<2",
+    "xtr-service-contracts>=1.0,<2",
 ]
 
 [build-system]
@@ -56,12 +79,16 @@ reportUnusedVariable = "error"
 reportMissingParameterType = "error"
 reportPrivateUsage = "error"
 
-# `@override` landed in typing in 3.12, and this library ships no dependencies,
-# so on 3.11 there is nothing to import it from.
-reportImplicitOverride = "none"
 # An error message long enough to be useful has to wrap, and a 100-column
 # limit puts the break inside the string.
 reportImplicitStringConcatenation = "none"
+
+# Tests check what a pool keeps to itself — which client it holds, which lock
+# registry it computes under — for the same reason ruff's SLF001 is off for tests.
+[[tool.basedpyright.executionEnvironments]]
+root = "tests"
+extraPaths = ["."]
+reportPrivateUsage = "none"
 
 # ─────────────────────────────────────────────────────────────────
 # ruff — select = ["ALL"], minimal justified ignores
@@ -88,21 +115,33 @@ ignore = [
     "TD003",
     "FIX002",
     # Exceptions compose their own messages from typed fields; the string at a
-    # raise site is a `reason` data field. See xtr_clock/exception/.
+    # raise site is a `reason` data field. See xtr_cache/exception/.
     "TRY003",
     "EM101",
     "EM102",
+    # A context mapping after the message is the logger interface's signature, not a
+    # stray %-format argument: these rules assume every `logger.info` is stdlib's.
+    "PLE1205",
+    "PLE1206",
 ]
 fixable = ["ALL"]
 unfixable = []
 
 [tool.ruff.lint.per-file-ignores]
+# xtr-console reads a command's annotations at runtime — the constructor's for
+# a container, __call__'s for the command line — so none can be deferred.
+"src/xtr_cache/command/*.py" = ["TC001", "TC002", "TC003"]
+# The cache bundle registers factory functions whose signatures the engine
+# reads at runtime, and the container resolves its config's fields; deferring
+# these would register the factories under nothing.
+"src/xtr_cache/bundle/*.py" = ["TC001", "TC002", "TC003"]
 "tests/**/*.py" = [
     "S101",    # assert is the point of pytest
     "ARG",     # fixtures look unused
     "PLR2004", # magic numbers in test data
     "SLF001",  # tests reach into privates
     "D",       # test names are the docs
+    "ASYNC240", # a test inspects the files it wrote under its own tmp_path, in place
     "DTZ001",  # a naive datetime is the input under test
     "DTZ005",
     "DTZ007",
