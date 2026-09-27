@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import stat
 import sys
+import tempfile
 import time
 from typing import TYPE_CHECKING
 
@@ -16,6 +18,10 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 pytestmark = pytest.mark.anyio
+
+posix_only = pytest.mark.skipif(
+    sys.platform == "win32", reason="file ownership and modes are POSIX"
+)
 
 
 class TestFilesystemAdapter(PoolTests):
@@ -190,3 +196,65 @@ async def test_pruning_removes_what_an_interrupted_write_left_long_ago(tmp_path:
 
     assert not abandoned.exists()
     assert in_progress.exists()
+
+
+@pytest.fixture
+def temporary_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
+    """Stand in for the system's temporary directory, where the default one goes."""
+    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    return tmp_path / "xtr-cache"
+
+
+@posix_only
+async def test_the_default_directory_is_made_for_this_user_alone(temporary_directory: Path) -> None:
+    pool = FilesystemAdapter("pool")
+
+    assert await pool.save((await pool.get_item("a")).set(1))
+
+    assert stat.S_IMODE(temporary_directory.stat().st_mode) == 0o700
+
+
+@posix_only
+async def test_a_default_directory_of_this_user_is_made_private(temporary_directory: Path) -> None:
+    temporary_directory.mkdir(mode=0o777)
+    temporary_directory.chmod(0o777)
+    pool = FilesystemAdapter("pool")
+
+    assert await pool.save((await pool.get_item("a")).set(1))
+
+    assert stat.S_IMODE(temporary_directory.stat().st_mode) == 0o700
+
+
+@posix_only
+async def test_a_default_directory_of_another_user_is_refused(
+    temporary_directory: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    writer = FilesystemAdapter("pool")
+    assert await writer.save((await writer.get_item("a")).set(1))
+    monkeypatch.setattr(os, "getuid", lambda: temporary_directory.stat().st_uid + 1)
+    pool = FilesystemAdapter("pool")
+    logger = RecordingLogger()
+    pool.set_logger(logger)
+
+    assert not (await pool.get_item("a")).is_hit()
+    assert not await pool.save((await pool.get_item("b")).set(1))
+    assert any("Refusing" in message for message in logger.messages("warning"))
+
+
+@posix_only
+async def test_a_file_in_place_of_the_default_directory_is_refused(
+    temporary_directory: Path,
+) -> None:
+    _ = temporary_directory.write_text("not a directory")
+    pool = FilesystemAdapter("pool")
+
+    assert not await pool.save((await pool.get_item("a")).set(1))
+
+
+async def test_a_directory_the_application_chose_is_left_as_it_is(tmp_path: Path) -> None:
+    tmp_path.chmod(0o755)
+    pool = FilesystemAdapter("pool", directory=tmp_path)
+
+    assert await pool.save((await pool.get_item("a")).set(1))
+
+    assert stat.S_IMODE(tmp_path.stat().st_mode) == 0o755

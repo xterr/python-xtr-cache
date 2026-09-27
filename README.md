@@ -135,6 +135,11 @@ goes to a temporary file first and replaces the value's file in one step, so rea
 half a value. File work runs on a worker thread, off the event loop. Nothing is created until the
 first write. An expired file is removed when read; `await pool.prune()` removes the rest.
 
+Given no directory, a pool uses `xtr-cache` in the system's temporary directory, which any user
+may create first. Values are unpickled when read, so that directory is made readable by its owner
+alone, and one belonging to another user is refused: reads miss, writes fail, and the pool logs
+why. A directory you give is used as it is.
+
 ### `RedisAdapter`
 
 ```python

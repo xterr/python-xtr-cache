@@ -7,6 +7,7 @@ import base64
 import hashlib
 import os
 import secrets
+import stat
 import tempfile
 import time
 from pathlib import Path
@@ -41,6 +42,9 @@ _ABANDONED_AFTER: Final = 3600.0
 
 _WRITE_FLAGS: Final = os.O_WRONLY | os.O_CREAT | os.O_EXCL
 
+_PRIVATE_MODE: Final = 0o700
+"""The default directory's mode: in the shared temporary directory, only its owner may enter."""
+
 
 @final
 class FilesystemAdapter(AbstractAdapter, PruneableInterface):
@@ -53,10 +57,18 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
 
     Nothing is created until the first value is written. An expired file is
     removed when it is read; :meth:`prune` removes the ones nobody reads.
+
+    Without a directory of its own, a pool keeps its files in the system's
+    temporary directory, where every user may create one first. Values are
+    unpickled when read, so there the directory is made for this user alone,
+    and one belonging to anybody else is refused: every read misses and every
+    write fails, and the pool logs why.
     """
 
     _directory: Path
     _marshaller: MarshallerInterface
+    _private_root: Path | None
+    _private_root_checked: bool
 
     def __init__(
         self,
@@ -91,6 +103,8 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
             Path(directory) if directory is not None else Path(tempfile.gettempdir()) / "xtr-cache"
         )
         self._directory = base / (namespace or _NO_NAMESPACE)
+        self._private_root = base if directory is None else None
+        self._private_root_checked = False
         self._marshaller = marshaller if marshaller is not None else DefaultMarshaller()
 
     @property
@@ -138,6 +152,8 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
 
     def _read_all(self, ids: Sequence[str], now: float) -> dict[str, bytes]:
         found: dict[str, bytes] = {}
+        if not self._is_trusted(create=False):
+            return found
         for id_ in ids:
             content = self._read(self._path(id_))
             if content is None:
@@ -153,6 +169,8 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
         return found
 
     def _is_live(self, id_: str, now: float) -> bool:
+        if not self._is_trusted(create=False):
+            return False
         content = self._read(self._path(id_))
         if content is None or content[1] != id_:
             return False
@@ -176,6 +194,8 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
         return ok
 
     def _write_all(self, encoded: Mapping[str, bytes], expiry: float) -> list[str]:
+        if not self._is_trusted(create=True):
+            return list(encoded)
         failed: list[str] = []
         for id_, data in encoded.items():
             path = self._path(id_)
@@ -195,6 +215,49 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
                 self._log('Failed to write key "{key}": {reason}', error, key=id_)
 
         return failed
+
+    def _is_trusted(self, *, create: bool) -> bool:
+        """Tell whether the files under the default directory may be read and written.
+
+        Only the default directory is checked: one the application chose is
+        its own. Creating it makes it private; an existing one of this user's
+        is made private too. Once found trustworthy, it stays so: in a
+        temporary directory nobody else may rename or remove it.
+        """
+        root = self._private_root
+        if root is None or self._private_root_checked:
+            return True
+        try:
+            if create:
+                root.mkdir(mode=_PRIVATE_MODE, parents=True, exist_ok=True)
+            status = root.lstat()
+        except FileNotFoundError:
+            return False
+        except OSError as error:
+            self._log(
+                'Cannot use the cache directory "{directory}": {reason}', error, directory=root
+            )
+            return False
+
+        owner = os.getuid() if hasattr(os, "getuid") else status.st_uid
+        if not stat.S_ISDIR(status.st_mode) or status.st_uid != owner:
+            self._log(
+                'Refusing the cache directory "{directory}": it is not a directory of this user.',
+                directory=root,
+            )
+            return False
+        if stat.S_IMODE(status.st_mode) != _PRIVATE_MODE:
+            try:
+                root.chmod(_PRIVATE_MODE)
+            except OSError as error:
+                self._log(
+                    'Cannot make the cache directory "{directory}" private: {reason}',
+                    error,
+                    directory=root,
+                )
+                return False
+        self._private_root_checked = True
+        return True
 
     def _prune(self) -> bool:
         now = self._clock.now().timestamp()
