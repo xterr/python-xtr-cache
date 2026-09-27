@@ -58,8 +58,7 @@ class CacheConfig:
         app: The ``app`` pool's adapter, or several to chain, fastest first.
         pools: Every other pool, by name.
         directory: Where ``"filesystem"`` keeps its files: ``cache`` under the
-            kernel's ``share_dir`` by default, a directory of the system's
-            temporary one set aside for this project.
+            kernel's ``share_dir`` by default, ``var/share`` in the project.
         prefix_seed: What every pool's namespace is derived from, with its
             name: the project directory by default, so two applications
             sharing a backend never see each other's keys. Give two

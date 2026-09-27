@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -11,6 +10,7 @@ from redis.asyncio import Redis
 from xtr_console import Application, ApplicationTester, ExitCode
 from xtr_dependency_injection import Kernel, ServicesResetter
 from xtr_dependency_injection.exception import ServiceResolutionError
+from xtr_dependency_injection.kernel import kernel as kernel_module
 from xtr_dependency_injection.testing import assert_zero_config
 from xtr_logging_contracts import LoggerInterface
 
@@ -227,7 +227,11 @@ async def test_with_no_configuration_the_app_pool_is_files_under_the_share_dir(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    monkeypatch.setattr(tempfile, "tempdir", str(tmp_path))
+    def redirected(project_dir: Path) -> Path:
+        del project_dir
+        return tmp_path / "share"
+
+    monkeypatch.setattr(kernel_module, "share_dir", redirected)
 
     async with await Kernel("tests.fixtures.app_cache_default", env="test").boot() as booted:
         pool = await _pool(booted, "app")

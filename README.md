@@ -263,7 +263,7 @@ Everything adding this package to an application on
   returning `CacheConfig` — see [Kernel / bundle](#kernel--bundle).
 - **Environment** — nothing required. A DSN given as `env(...)` must be set when the
   application boots: booting checks every pool.
-- **Ignore** — nothing: files live under `kernel.share_dir`, outside the project.
+- **Ignore** — `var/`: files live under `kernel.share_dir`, `var/share` in the project.
 - **Remove** — drop the `BUNDLES` entry, delete `<app>/config/cache.py`, then
   `uv remove xtr-cache`.
 - **Check** — `debug:bundles` shows `cache` as `listed` and `active`.
@@ -323,7 +323,7 @@ class Catalogue:
 |---|---|
 | `app` | The `app` pool's adapter, or several to chain. `"filesystem"` by default |
 | `pools` | Every other pool: an adapter, several, or a `PoolConfig(adapter, default_lifetime, tags, namespace)`. A pool without adapter uses `app`'s. `tags=True` keeps tag versions in the pool itself; `tags="other"` keeps them in the pool named `other` |
-| `directory` | Where `"filesystem"` keeps files: `"%kernel.share_dir%/cache"` by default, a directory of the system's temporary one set aside for the project |
+| `directory` | Where `"filesystem"` keeps files: `"%kernel.share_dir%/cache"` by default, `var/share/cache` in the project |
 | `prefix_seed` | What each pool's namespace is derived from, with its name: `"%kernel.project_dir%"` by default, so two applications on one backend never meet; give two the same seed to share values |
 | `stampede_lock` | Where stampede locks go — any lock DSN: `"flock://%kernel.share_dir%/cache/locks"` by default, `"redis://…"` to span machines — or `None` for per-process protection only |
 
