@@ -167,8 +167,16 @@ class ChainAdapter(ContractsMixin, AdapterInterface, NamespacedPoolInterface, Pr
 
     @override
     def _scope(self) -> str:
-        first = self._adapters[0]
-        return first._scope() if isinstance(first, ContractsMixin) else ""  # noqa: SLF001 — a pool of this library.
+        """Return the first level's scope that sets the chain apart.
+
+        A level kept in memory has no namespace, being nobody else's; the
+        levels behind it do, and name the pool as well.
+        """
+        for adapter in self._adapters:
+            scope = adapter._scope() if isinstance(adapter, ContractsMixin) else ""  # noqa: SLF001 — a pool of this library.
+            if scope:
+                return scope
+        return ""
 
     @override
     def __repr__(self) -> str:

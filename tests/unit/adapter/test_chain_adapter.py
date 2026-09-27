@@ -150,3 +150,10 @@ async def test_a_value_stored_under_a_default_lifetime_carries_it_into_faster_po
         clock.sleep(10)
 
         assert not await fast.has_item("a")
+
+
+def test_stampede_locks_are_scoped_by_a_level_behind_a_memory_one(tmp_path: Path) -> None:
+    chain = ChainAdapter([ArrayAdapter(), FilesystemAdapter("app-ns", directory=tmp_path)])
+
+    assert chain._scope() == FilesystemAdapter("app-ns", directory=tmp_path)._scope()
+    assert chain._scope() != ""
