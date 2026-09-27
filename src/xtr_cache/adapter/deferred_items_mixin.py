@@ -23,8 +23,10 @@ class DeferredItemsMixin(CacheItemPoolInterface, ABC):
     """Queues saved items until :meth:`commit`, which the pool implements.
 
     :meth:`save` is a deferred save committed at once, so a pool writes in one
-    place only. What is queued is the pool's to drop when the keys are
-    deleted or cleared, and to commit before a queued key is read.
+    place only. What was queued before is committed first, apart, so the
+    answer is about the saved item alone and not another one's failure. What
+    is queued is the pool's to drop when the keys are deleted or cleared, and
+    to commit before a queued key is read.
     """
 
     _deferred: dict[str, CacheItem]
@@ -39,6 +41,9 @@ class DeferredItemsMixin(CacheItemPoolInterface, ABC):
         if not isinstance(item, CacheItem):
             return False
 
+        _ = self._deferred.pop(item.key, None)
+        if self._deferred:
+            _ = await self.commit()
         self._deferred[item.key] = item
         return await self.commit()
 

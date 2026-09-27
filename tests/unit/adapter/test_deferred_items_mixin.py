@@ -55,3 +55,34 @@ async def test_a_sub_namespace_view_starts_with_nothing_queued() -> None:
     assert pool.stored == {}
     await pool.reset()
     assert "ns:a" in pool.stored
+
+
+async def test_a_save_reports_its_own_item_not_one_queued_before() -> None:
+    pool = ScriptedAdapter()
+    pool.reject.add("bad")
+    _ = await pool.save_deferred(CacheItem("bad", 1))
+
+    assert await pool.save(CacheItem("good", 2))
+
+    assert "good" in pool.stored
+    assert "bad" not in pool.stored
+
+
+async def test_a_save_reports_its_own_item_failing() -> None:
+    pool = ScriptedAdapter()
+    pool.reject.add("bad")
+    _ = await pool.save_deferred(CacheItem("good", 1))
+
+    assert not await pool.save(CacheItem("bad", 2))
+
+    assert "good" in pool.stored
+
+
+async def test_a_save_replaces_a_queued_item_of_the_same_key_without_writing_it() -> None:
+    pool = ScriptedAdapter()
+    _ = await pool.save_deferred(CacheItem("a", 1))
+
+    assert await pool.save(CacheItem("a", 2))
+
+    assert [operation for operation, _ in pool.calls] == ["save"]
+    assert pool.stored["a"][0] == 2
