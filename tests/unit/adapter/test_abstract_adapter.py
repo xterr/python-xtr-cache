@@ -240,3 +240,25 @@ async def test_the_default_lifetime_is_known() -> None:
 
 async def test_an_item_read_is_a_cache_item() -> None:
     assert isinstance(await ScriptedAdapter().get_item("a"), CacheItem)
+
+
+async def test_a_refused_clear_prefix_keeps_what_was_queued() -> None:
+    pool = ScriptedAdapter()
+    _ = await pool.save_deferred(CacheItem("a!b", 1))
+
+    assert not await pool.clear("a!")
+    assert await pool.commit()
+
+    assert "a!b" in pool.stored
+
+
+async def test_a_failed_commit_drops_what_it_could_not_store() -> None:
+    pool = ScriptedAdapter()
+    _ = await pool.save_deferred(CacheItem("a", 1))
+    pool.fail.add("save")
+
+    assert not await pool.commit()
+    pool.fail.clear()
+    assert await pool.commit()
+
+    assert "a" not in pool.stored

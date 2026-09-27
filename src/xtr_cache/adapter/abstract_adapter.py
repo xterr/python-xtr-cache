@@ -189,10 +189,10 @@ class AbstractAdapter(
 
     @override
     async def clear(self, prefix: str = "") -> bool:
-        self._drop_deferred(prefix)
         if not _PREFIX_PATTERN.fullmatch(prefix):
             self._log("Failed to clear the cache: the prefix contains invalid characters.")
             return False
+        self._drop_deferred(prefix)
 
         try:
             return await self._do_clear(self._namespace + prefix)
