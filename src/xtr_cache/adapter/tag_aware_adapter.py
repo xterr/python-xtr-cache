@@ -28,6 +28,10 @@ if TYPE_CHECKING:
 __all__ = ["TagAwareAdapter"]
 
 TAGS_PREFIX: Final = "\x01tags\x01"
+
+#: How long a tag's version is kept. Given explicitly, so a tags pool's default
+#: lifetime never drops a version before the values that were saved with it.
+_TAG_VERSION_LIFETIME: Final = 100 * 365 * 86400
 """What the key holding a tag's version starts with, so it never meets a user key."""
 
 
@@ -244,9 +248,8 @@ class TagAwareAdapter(
         created = [tag for tag, found in current.items() if found is None]
 
         for tag in created:
-            _ = await self._tags.save_deferred(
-                CacheItem(TAGS_PREFIX + tag, versions[tag], clock=self._clock),
-            )
+            version = CacheItem(TAGS_PREFIX + tag, versions[tag], clock=self._clock)
+            _ = await self._tags.save_deferred(version.expires_after(_TAG_VERSION_LIFETIME))
         # A version the tags pool did not keep must not be trusted here while others miss it.
         if created and await self._tags.commit():
             now = self._clock.now().timestamp()

@@ -186,3 +186,14 @@ async def test_a_new_tag_version_the_tags_pool_did_not_keep_is_not_trusted() -> 
     remembered, _ = pool._known["red"]
     assert remembered is None
     assert not (await pool.get_item("a")).is_hit()
+
+
+async def test_a_default_lifetime_does_not_expire_the_versions_of_longer_lived_values() -> None:
+    pool = TagAwareAdapter(ArrayAdapter(60.0))
+
+    with mock_time("2024-04-09 12:00:00") as clock:
+        item = (await pool.get_item("a")).set("value").expires_after(3600)
+        _ = await pool.save(item.tag(["red"]))
+        clock.sleep(120)
+
+        assert (await pool.get_item("a")).is_hit()
