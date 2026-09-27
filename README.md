@@ -244,6 +244,25 @@ pool = RedisAdapter.from_url("redis://cache", "app", marshaller=SodiumMarshaller
 Keys rotate: the first encrypts, every one decrypts. Put the new key first and keep the old one
 until what it encrypted has expired.
 
+## Use in an application
+
+Everything adding this package to an application on
+[xtr-dependency-injection](../xtr-dependency-injection) takes — and, read backwards, what removing it undoes.
+
+- **Install** — `uv add "xtr-cache[di]"`; add `redis`, `sodium` or `console` for what you use.
+- **Activate** — `CacheBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`, imported
+  from `xtr_cache.bundle`.
+- **Brings along** — the logging and console bundles, when those packages are installed.
+- **Configure** — optional: with no configuration there is one `app` pool on files. Pools,
+  adapters and the stampede lock go in `<app>/config/cache.py`, a `@configure` function
+  returning `CacheConfig` — see [Kernel / bundle](#kernel--bundle).
+- **Environment** — nothing required. A DSN given as `env(...)` must be set when the
+  application boots: booting checks every pool.
+- **Ignore** — nothing: files live under `kernel.share_dir`, outside the project.
+- **Remove** — drop the `BUNDLES` entry, delete `<app>/config/cache.py`, then
+  `uv remove xtr-cache`.
+- **Check** — `debug:bundles` shows `cache` as `listed` and `active`.
+
 ## Kernel / bundle
 
 With [xtr-dependency-injection](../xtr-dependency-injection), list the bundle and name the pools:
