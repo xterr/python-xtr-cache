@@ -199,3 +199,15 @@ async def test_pools_sharing_a_backend_and_a_lock_registry_compute_a_value_once(
 
     assert await asyncio.gather(holding, waiting) == ["computed once", "computed once"]
     assert never.calls == 0
+
+
+async def test_a_reused_metadata_mapping_forgets_an_earlier_save_failure() -> None:
+    pool = ScriptedAdapter()
+    pool.fail.add("save")
+    metadata: Metadata = {}
+    _ = await pool.get("a", Computation(1), metadata=metadata)
+    pool.fail.clear()
+
+    _ = await pool.get("b", Computation(1), metadata=metadata)
+
+    assert "save_failed" not in metadata
