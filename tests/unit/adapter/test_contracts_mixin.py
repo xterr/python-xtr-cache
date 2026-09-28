@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 from xtr_cache_contracts import cache_mixin
+from xtr_clock import MockClock
 from xtr_clock.testing import mock_time
 from xtr_lock import InMemoryStore, LockFactory
 
@@ -14,6 +15,7 @@ from tests.support.recording_logger import RecordingLogger
 from tests.support.scripted_adapter import ScriptedAdapter
 from xtr_cache import (
     ArrayAdapter,
+    ChainAdapter,
     FilesystemAdapter,
     InvalidArgumentError,
     ItemInterface,
@@ -211,3 +213,19 @@ async def test_a_reused_metadata_mapping_forgets_an_earlier_save_failure() -> No
     _ = await pool.get("b", Computation(1), metadata=metadata)
 
     assert "save_failed" not in metadata
+
+
+@pytest.mark.parametrize("wrap", ["array", "chain", "tag_aware"])
+async def test_a_pool_given_a_clock_counts_lifetimes_on_it(wrap: str) -> None:
+    clock = MockClock("2026-01-01 00:00:00")
+    inner = ArrayAdapter(clock=clock)
+    pool: ArrayAdapter | ChainAdapter | TagAwareAdapter = {
+        "array": lambda: inner,
+        "chain": lambda: ChainAdapter([inner], clock=clock),
+        "tag_aware": lambda: TagAwareAdapter(inner, clock=clock),
+    }[wrap]()
+    _ = await pool.save((await pool.get_item("k")).set(1).expires_after(10))
+
+    clock.sleep(11)
+
+    assert not (await pool.get_item("k")).is_hit()
