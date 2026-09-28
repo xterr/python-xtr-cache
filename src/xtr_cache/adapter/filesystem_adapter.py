@@ -42,6 +42,9 @@ _ABANDONED_AFTER: Final = 3600.0
 
 _WRITE_FLAGS: Final = os.O_WRONLY | os.O_CREAT | os.O_EXCL
 
+_HEADER_BYTES: Final = 4096
+"""Enough of a file to hold its expiry and identifier lines, in all but freak cases."""
+
 _PRIVATE_MODE: Final = 0o700
 """The default directory's mode: in the shared temporary directory, only its owner may enter."""
 
@@ -171,17 +174,17 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
     def _is_live(self, id_: str, now: float) -> bool:
         if not self._is_trusted(create=False):
             return False
-        content = self._read(self._path(id_))
-        if content is None or content[1] != id_:
+        header = self._read_header(self._path(id_))
+        if header is None or header[1] != id_:
             return False
-        return not content[0] or content[0] > now
+        return not header[0] or header[0] > now
 
     def _clear(self, namespace: str) -> bool:
         ok = True
         for path in self._files():
             if namespace:
-                content = self._read(path)
-                if content is None or not content[1].startswith(namespace):
+                header = self._read_header(path)
+                if header is None or not header[1].startswith(namespace):
                     continue
             ok = _unlink(path) and ok
 
@@ -263,8 +266,8 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
         now = self._clock.now().timestamp()
         ok = True
         for path in self._files():
-            content = self._read(path)
-            if content is not None and content[0] and content[0] <= now:
+            header = self._read_header(path)
+            if header is not None and header[0] and header[0] <= now:
                 ok = _unlink(path) and ok
 
         # File times are the file system's, so they are compared with the machine's clock.
@@ -283,6 +286,29 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
             for name in names:
                 if name.startswith(_TEMPORARY_PREFIX) is temporary:
                     yield Path(root) / name
+
+    @staticmethod
+    def _read_header(path: Path) -> tuple[float, str] | None:
+        """Return a file's expiry and identifier, reading no more of it than they take.
+
+        Pruning and clearing look at every file; reading each value in full
+        to see two short lines would read the whole cache.
+        """
+        try:
+            with path.open("rb") as file:
+                head = file.read(_HEADER_BYTES)
+        except OSError:
+            return None
+        if head.count(b"\n") < 2:  # noqa: PLR2004 — the expiry line and the identifier line
+            # An identifier longer than the bound: read the file as a whole.
+            content = FilesystemAdapter._read(path)
+            return None if content is None else (content[0], content[1])
+        expiry, _, rest = head.partition(b"\n")
+        stored_id, _, _ = rest.partition(b"\n")
+        try:
+            return float(expiry), unquote(stored_id.decode("ascii"))
+        except (UnicodeDecodeError, ValueError):
+            return None
 
     @staticmethod
     def _read(path: Path) -> tuple[float, str, bytes] | None:

@@ -258,3 +258,38 @@ async def test_a_directory_the_application_chose_is_left_as_it_is(tmp_path: Path
     assert await pool.save((await pool.get_item("a")).set(1))
 
     assert stat.S_IMODE(tmp_path.stat().st_mode) == 0o755
+
+
+async def test_pruning_and_clearing_read_no_value_in_full(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    pool = FilesystemAdapter("pool", directory=tmp_path)
+    with mock_time("2024-04-09 12:00:00") as clock:
+        _ = await pool.save((await pool.get_item("short")).set(b"x" * 100_000).expires_after(1))
+        _ = await pool.save((await pool.get_item("kept")).set(b"x" * 100_000))
+        clock.sleep(2)
+
+        def whole_value_read(_path: Path) -> None:
+            raise AssertionError
+
+        monkeypatch.setattr(FilesystemAdapter, "_read", staticmethod(whole_value_read))
+        assert await pool.prune()
+        assert len(_files(tmp_path)) == 1
+        assert await pool.clear("kept")
+
+    assert _files(tmp_path) == []
+
+
+async def test_a_file_whose_identifier_outgrows_the_header_read_is_still_pruned(
+    tmp_path: Path,
+) -> None:
+    pool = FilesystemAdapter("pool", directory=tmp_path)
+    key = "k" * 5000
+
+    with mock_time("2024-04-09 12:00:00") as clock:
+        _ = await pool.save((await pool.get_item(key)).set(1).expires_after(1))
+        clock.sleep(2)
+
+        assert await pool.prune()
+
+    assert _files(tmp_path) == []
