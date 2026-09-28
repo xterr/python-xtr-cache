@@ -42,6 +42,9 @@ di = [
 console = [
     "xtr-console>=1.0,<2",
 ]
+logging = [
+    "xtr-logging>=1.0,<2",
+]
 
 # Advertises the bundle so debug:bundles can name it when installed but not listed.
 # Advertising activates nothing: an application lists the bundles it wants.

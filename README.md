@@ -256,7 +256,8 @@ until what it encrypted has expired.
 Everything adding this package to an application on
 [xtr-dependency-injection](../xtr-dependency-injection) takes — and, read backwards, what removing it undoes.
 
-- **Install** — `uv add "xtr-cache[di]"`; add `redis`, `sodium` or `console` for what you use.
+- **Install** — `uv add "xtr-cache[di]"`; add `redis`, `sodium`, `console` or `logging` for what
+  you use.
 - **Activate** — `CacheBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`, imported
   from `xtr_cache.bundle`.
 - **Brings along** — the logging and console bundles, when those packages are installed.
