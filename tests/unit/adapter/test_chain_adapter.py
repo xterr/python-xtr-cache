@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
@@ -157,3 +158,16 @@ def test_stampede_locks_are_scoped_by_a_level_behind_a_memory_one(tmp_path: Path
 
     assert chain._scope() == FilesystemAdapter("app-ns", directory=tmp_path)._scope()
     assert chain._scope() != ""
+
+
+async def test_concurrent_reads_fill_the_faster_pool_with_what_the_slower_one_holds() -> None:
+    fast, slow = ArrayAdapter(), ArrayAdapter()
+    keys = [f"k{index}" for index in range(20)]
+    for key in keys:
+        _ = await slow.save((await slow.get_item(key)).set(key))
+    chain = ChainAdapter([fast, slow])
+
+    reads = await asyncio.gather(*(chain.get_items([key]) for key in keys))
+
+    assert [found[key].get() for found, key in zip(reads, keys, strict=True)] == keys
+    assert [(await fast.get_item(key)).get() for key in keys] == keys

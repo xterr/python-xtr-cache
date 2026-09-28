@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING
 
 import pytest
@@ -30,6 +31,12 @@ class TestTagAwareAdapter(PoolTests):
     @pytest.fixture
     def pool(self) -> TagAwareAdapter:
         return TagAwareAdapter(ArrayAdapter(), known_tag_versions_ttl=0)
+
+
+class TestTagAwareAdapterOverAPoolWithADefaultLifetime(PoolTests):
+    @pytest.fixture
+    def pool(self) -> TagAwareAdapter:
+        return TagAwareAdapter(ArrayAdapter(60.0), known_tag_versions_ttl=0)
 
 
 async def _save_tagged(pool: TagAwareAdapter, key: str, *tags: str) -> None:
@@ -197,3 +204,13 @@ async def test_a_default_lifetime_does_not_expire_the_versions_of_longer_lived_v
         clock.sleep(120)
 
         assert (await pool.get_item("a")).is_hit()
+
+
+async def test_items_saved_concurrently_under_one_tag_all_go_when_it_is_invalidated() -> None:
+    pool = TagAwareAdapter(ArrayAdapter(), known_tag_versions_ttl=0)
+    keys = [f"k{index}" for index in range(20)]
+
+    _ = await asyncio.gather(*(_save_tagged(pool, key, "shared") for key in keys))
+    assert await pool.invalidate_tags(["shared"])
+
+    assert not any(item.is_hit() for item in (await pool.get_items(keys)).values())
