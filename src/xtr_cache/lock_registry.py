@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 import zlib
 from typing import TYPE_CHECKING, Final, TypeVar, cast, final
 
@@ -41,16 +42,17 @@ class LockRegistry(LoggerAware):
 
     A caller that waited longer than ``wait`` stops waiting and computes the
     value itself: a stuck holder must not stall every reader of the key. The
-    slot is then evicted, in this process, so its keys spread over the other
-    slots instead of waiting on it in turn; with every slot evicted, values
-    are computed without locking.
+    slot is then set aside, in this process, for another ``wait``: its keys
+    are computed without locking meanwhile rather than wait on it in turn,
+    and it is tried again after. A key keeps its slot whatever is set aside,
+    so every process agrees on which lock guards it.
     """
 
-    __slots__ = ("_available", "_locks", "_prefix", "_slots", "_wait")
+    __slots__ = ("_evicted", "_locks", "_prefix", "_slots", "_wait")
 
     _locks: LockFactory
     _slots: int
-    _available: list[int]
+    _evicted: dict[int, float]
     _wait: float
     _prefix: str
 
@@ -80,7 +82,7 @@ class LockRegistry(LoggerAware):
 
         self._locks = locks
         self._slots = slots
-        self._available = list(range(slots))
+        self._evicted = {}
         self._wait = wait
         self._prefix = prefix
 
@@ -140,15 +142,19 @@ class LockRegistry(LoggerAware):
             self.logger.info('Item "{key}" not found while lock was released, retrying', context)
 
     def _slot(self, key: str) -> int | None:
-        """Return the slot ``key`` computes under; ``None`` once every slot was evicted."""
-        if not self._available:
+        """Return the slot ``key`` computes under; ``None`` while that slot is set aside."""
+        slot = zlib.crc32(key.encode()) % self._slots
+        until = self._evicted.get(slot)
+        if until is None:
+            return slot
+        if time.monotonic() < until:
             return None
-        return self._available[zlib.crc32(key.encode()) % len(self._available)]
+        del self._evicted[slot]
+        return slot
 
     def _evict(self, slot: int) -> None:
-        """Stop using ``slot``, whose holder is stuck, so later callers do not wait on it too."""
-        if slot in self._available:
-            self._available.remove(slot)
+        """Set ``slot`` aside for a while, its holder stuck, so later callers do not wait on it."""
+        self._evicted[slot] = time.monotonic() + self._wait
 
     @property
     def slots(self) -> int:

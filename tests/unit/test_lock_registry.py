@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import TYPE_CHECKING, final
 
 import pytest
@@ -134,7 +135,7 @@ async def test_forcing_computes_again_after_waiting() -> None:
     assert await _wait_then(holder, waiting) == ("theirs", "mine")
 
 
-async def test_a_waiter_that_waited_too_long_computes_anyway_and_evicts_the_slot() -> None:
+async def test_a_waiter_that_waited_too_long_computes_anyway_and_sets_the_slot_aside() -> None:
     store = InMemoryStore()
     holder = _Holder(_registry(store)[0], "late")
     waiter, logger = _registry(store, wait=0.05)
@@ -145,11 +146,44 @@ async def test_a_waiter_that_waited_too_long_computes_anyway_and_evicts_the_slot
 
     logger.records.clear()
     assert await asyncio.wait_for(waiter.compute("k", _mine, _unreachable), timeout=0.02) == "mine"
+    assert logger.records == []
+    assert await holder.finish() == "late"
+
+
+async def test_setting_a_slot_aside_leaves_every_other_key_on_its_own_slot() -> None:
+    store = InMemoryStore()
+    holder = _Holder(_registry(store, slots=2)[0], "late")
+    waiter, logger = _registry(store, slots=2, wait=0.05)
+    await holder.start("a")
+    _ = await waiter.compute("a", _mine, _unreachable)
+    other = next(key for key in ("b", "c", "d", "e") if waiter._slot(key) != waiter._slot("a"))
+    logger.records.clear()
+
+    _ = await waiter.compute(other, _mine, _unreachable)
+
     assert logger.messages("info") == ['Lock acquired, now computing item "{key}"']
     assert await holder.finish() == "late"
 
 
-async def test_with_every_slot_evicted_values_are_computed_without_locking() -> None:
+async def test_a_slot_set_aside_is_tried_again_once_the_wait_has_passed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    store = InMemoryStore()
+    holder = _Holder(_registry(store)[0], "late")
+    waiter, logger = _registry(store, wait=0.05)
+    await holder.start()
+    _ = await waiter.compute("k", _mine, _unreachable)
+    _ = await holder.finish()
+    later = time.monotonic() + 1
+    monkeypatch.setattr(time, "monotonic", lambda: later)
+    logger.records.clear()
+
+    _ = await waiter.compute("k", _mine, _unreachable)
+
+    assert logger.messages("info") == ['Lock acquired, now computing item "{key}"']
+
+
+async def test_with_its_slot_set_aside_another_key_is_computed_without_locking() -> None:
     store = InMemoryStore()
     holder = _Holder(_registry(store, slots=1)[0], "late")
     waiter, logger = _registry(store, slots=1, wait=0.05)
