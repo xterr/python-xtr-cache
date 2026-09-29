@@ -3,8 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import base64
-import hashlib
 import os
 import secrets
 import stat
@@ -16,6 +14,7 @@ from urllib.parse import quote, unquote
 
 from typing_extensions import override
 
+from xtr_cache._digest import urlsafe_digest
 from xtr_cache.exception import InvalidArgumentError
 from xtr_cache.marshaller.default_marshaller import DefaultMarshaller
 from xtr_cache.pruneable_interface import PruneableInterface
@@ -149,8 +148,7 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
         return f"{name}({self._namespace!r}, {self._default_lifetime!r}, {str(self._directory)!r})"
 
     def _path(self, id_: str) -> Path:
-        digest = base64.urlsafe_b64encode(hashlib.sha256(id_.encode()).digest()).decode()
-        digest = digest.rstrip("=")
+        digest = urlsafe_digest(id_)
         return self._directory / digest[0] / digest[1] / digest[2:]
 
     def _read_all(self, ids: Sequence[str], now: float) -> dict[str, bytes]:
@@ -225,7 +223,9 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
         Only the default directory is checked: one the application chose is
         its own. Creating it makes it private; an existing one of this user's
         is made private too. Once found trustworthy, it stays so: in a
-        temporary directory nobody else may rename or remove it.
+        temporary directory nobody else may rename or remove it. Where the
+        system has no user ids, as on Windows, the owner compared is the
+        directory's own, so the check passes: the directory is taken as it is.
         """
         root = self._private_root
         if root is None or self._private_root_checked:

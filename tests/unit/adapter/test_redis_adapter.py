@@ -149,7 +149,7 @@ async def test_a_client_given_stays_the_callers() -> None:
     redis = FakeRedis()
     adapter = RedisAdapter(redis.as_client(), "ns")
 
-    await adapter.aclose()
+    await adapter.close()
 
     assert not adapter.owns_connection
     assert not redis.closed
@@ -160,4 +160,4 @@ async def test_a_client_opened_from_a_dsn_is_the_adapters_to_close() -> None:
     adapter = RedisAdapter.from_url("redis://localhost:6379/15", "ns", 5)
 
     assert adapter.owns_connection
-    await adapter.aclose()
+    await adapter.close()

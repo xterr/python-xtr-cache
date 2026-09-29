@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import secrets
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Final, Self, final
@@ -63,6 +64,7 @@ class TagAwareAdapter(
     _known_ttl: float
     _known: dict[str, tuple[str | None, float]]
     _deferred: dict[str, CacheItem]
+    _minting: asyncio.Lock
 
     def __init__(
         self,
@@ -89,6 +91,7 @@ class TagAwareAdapter(
         self._known_ttl = known_tag_versions_ttl
         self._known = {}
         self._deferred = {}
+        self._minting = asyncio.Lock()
         if clock is not None:
             self._clock = clock
 
@@ -175,6 +178,7 @@ class TagAwareAdapter(
 
     @override
     def with_sub_namespace(self, namespace: str, /) -> Self:
+        _ = self._flights()  # made now, so the view shares it rather than make its own
         clone = self._unqueued_copy()
         if isinstance(self._items, NamespacedPoolInterface):
             clone._items = self._items.with_sub_namespace(namespace)  # noqa: SLF001 — a copy of this very class.
@@ -242,19 +246,34 @@ class TagAwareAdapter(
         return versions
 
     async def _versions_for_saving(self, tags: Iterable[str]) -> dict[str, str]:
-        """Return each tag's version, giving a new one to every tag that has none."""
-        current = await self._current_versions(tags)
-        versions = {tag: found or secrets.token_hex(6) for tag, found in current.items()}
-        created = [tag for tag, found in current.items() if found is None]
+        """Return each tag's version, giving a new one to every tag that has none.
 
-        for tag in created:
-            version = CacheItem(TAGS_PREFIX + tag, versions[tag], clock=self._clock)
-            _ = await self._tags.save_deferred(version.expires_after(_TAG_VERSION_LIFETIME))
-        # A version the tags pool did not keep must not be trusted here while others miss it.
-        if created and await self._tags.commit():
-            now = self._clock.now().timestamp()
+        New versions are given one save at a time: saves giving one tag a
+        version at once would each stamp their items with their own, and the
+        items of all but the last would never be hits.
+        """
+        current = await self._current_versions(tags)
+        if all(found is not None for found in current.values()):
+            return {tag: found for tag, found in current.items() if found is not None}
+
+        async with self._minting:
+            # A save holding the lock before this one may have given them one meanwhile.
+            current.update(
+                await self._current_versions(
+                    [tag for tag, found in current.items() if found is None]
+                )
+            )
+            versions = {tag: found or secrets.token_hex(6) for tag, found in current.items()}
+            created = [tag for tag, found in current.items() if found is None]
+
             for tag in created:
-                self._remember(tag, versions[tag], now)
+                version = CacheItem(TAGS_PREFIX + tag, versions[tag], clock=self._clock)
+                _ = await self._tags.save_deferred(version.expires_after(_TAG_VERSION_LIFETIME))
+            # A version the tags pool did not keep must not be trusted here while others miss it.
+            if created and await self._tags.commit():
+                now = self._clock.now().timestamp()
+                for tag in created:
+                    self._remember(tag, versions[tag], now)
 
         return versions
 

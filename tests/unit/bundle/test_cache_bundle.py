@@ -177,7 +177,7 @@ async def test_a_redis_connection_opened_from_a_dsn_is_closed_with_the_container
     async def record(adapter: RedisAdapter) -> None:
         closed.append(adapter)
 
-    monkeypatch.setattr(RedisAdapter, "aclose", record)
+    monkeypatch.setattr(RedisAdapter, "close", record)
 
     async with await _kernel(tmp_path).boot() as booted:
         redis = await _pool(booted, "redis")

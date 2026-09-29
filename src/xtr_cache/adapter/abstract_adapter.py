@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import base64
 import contextlib
-import hashlib
 import math
 import re
 from abc import ABC, abstractmethod
@@ -13,6 +11,7 @@ from typing import TYPE_CHECKING, ClassVar, Final, Self
 from typing_extensions import override
 from xtr_cache_contracts import InvalidArgumentError, NamespacedPoolInterface
 
+from xtr_cache._digest import urlsafe_digest
 from xtr_cache.cache_item import CacheItem
 from xtr_cache.exception.marshalling_error import MarshallingError
 
@@ -267,6 +266,7 @@ class AbstractAdapter(
 
     @override
     def with_sub_namespace(self, namespace: str, /) -> Self:
+        _ = self._flights()  # made now, so the view shares it rather than make its own
         clone = self._unqueued_copy()
         clone._namespace = (  # noqa: SLF001 — a copy of this very class.
             self._namespace + CacheItem.validate_key(namespace) + self.NS_SEPARATOR
@@ -323,8 +323,7 @@ class AbstractAdapter(
         if self.max_id_length is None or len(id_) <= self.max_id_length:
             return id_
 
-        digest = base64.urlsafe_b64encode(hashlib.sha256(key.encode()).digest()[:16]).decode()
-        return self._namespace + digest.rstrip("=") + self.NS_SEPARATOR
+        return self._namespace + urlsafe_digest(key, size=16) + self.NS_SEPARATOR
 
     def _unmarshall_found(
         self,

@@ -19,8 +19,6 @@ container closes; between messages, the kernel's resetter commits it.
 
 from __future__ import annotations
 
-import base64
-import hashlib
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import Final, final
 
@@ -48,6 +46,7 @@ from xtr_lock.store import RedisStore, StoreFactory
 from xtr_logging_contracts import LoggerAwareInterface, LoggerInterface
 from xtr_service_contracts import ContainerInterface
 
+from xtr_cache._digest import urlsafe_digest
 from xtr_cache.adapter.adapter_factory import AdapterFactory
 from xtr_cache.adapter.adapter_interface import AdapterInterface
 from xtr_cache.adapter.chain_adapter import ChainAdapter
@@ -96,7 +95,7 @@ class CacheBundle(Bundle[CacheConfig]):
         if not bundle_active(builder, "logging"):
             return
         # Logging is an optional peer, importable only once it is active.
-        from xtr_logging.bundle import LoggingConfig  # noqa: PLC0415
+        from xtr_logging.bundle import LoggingConfig  # noqa: PLC0415 — optional peer
 
         def add_cache_channel(config: LoggingConfig) -> LoggingConfig:
             return config.with_channels(CACHE_CHANNEL)
@@ -193,7 +192,7 @@ async def _lock_registry(
         yield registry
     finally:
         if isinstance(store, RedisStore):
-            await store.aclose()
+            await store.close()
 
 
 def _cache_pool_clearer(config: CacheConfig, container: ContainerInterface) -> CachePoolClearer:
@@ -254,7 +253,7 @@ def _pool_factory(
             finally:
                 for each in built:
                     if isinstance(each, RedisAdapter):
-                        await each.aclose()
+                        await each.close()
 
     return pool
 
@@ -285,5 +284,4 @@ async def _build_adapters(
 
 def _namespace(name: str, seed: str) -> str:
     """Derive a pool's namespace from its name and the seed: short, and a valid key."""
-    digest = hashlib.sha256(f"{name}.{seed}".encode()).digest()
-    return base64.urlsafe_b64encode(digest).decode("ascii")[:_NAMESPACE_LENGTH]
+    return urlsafe_digest(f"{name}.{seed}")[:_NAMESPACE_LENGTH]

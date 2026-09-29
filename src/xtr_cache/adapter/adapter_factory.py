@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Final, final
 
-from xtr_lock.store import is_redis_client, is_redis_dsn, redis_installed
+from xtr_lock.store import (
+    describe_connection_scheme,
+    is_redis_client,
+    is_redis_dsn,
+    redis_installed,
+)
 
 from xtr_cache.exception import InvalidArgumentError
 
@@ -128,7 +133,6 @@ class AdapterFactory:
                 raise InvalidArgumentError(RedisAdapter.MISSING_CLIENT)
             return
 
-        scheme, separator, _ = connection.partition(":")
-        described = f"{scheme}:" if separator else connection
-
-        raise InvalidArgumentError(f'Unsupported cache connection: "{described}".')
+        raise InvalidArgumentError(
+            f'Unsupported cache connection: "{describe_connection_scheme(connection)}".'
+        )

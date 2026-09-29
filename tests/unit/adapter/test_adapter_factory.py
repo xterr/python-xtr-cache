@@ -49,7 +49,7 @@ async def test_a_redis_dsn_makes_an_adapter_owning_its_connection() -> None:
     assert isinstance(adapter, RedisAdapter)
     assert adapter.owns_connection
     assert adapter.namespace == "ns:"
-    await adapter.aclose()
+    await adapter.close()
 
 
 async def test_a_redis_client_makes_an_adapter_on_that_client() -> None:

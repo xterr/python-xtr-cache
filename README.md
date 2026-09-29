@@ -138,7 +138,8 @@ first write. An expired file is removed when read; `await pool.prune()` removes 
 Given no directory, a pool uses `xtr-cache` in the system's temporary directory, which any user
 may create first. Values are unpickled when read, so that directory is made readable by its owner
 alone, and one belonging to another user is refused: reads miss, writes fail, and the pool logs
-why. A directory you give is used as it is.
+why. A directory you give is used as it is. Where the system has no user ids to compare, as
+on Windows, neither check applies: the directory is created, but its owner is not checked.
 
 ### `RedisAdapter`
 
@@ -148,7 +149,7 @@ from xtr_cache import RedisAdapter
 
 pool = RedisAdapter(Redis.from_url("redis://cache:6379/0"), "app")  # your client, you close it
 pool = RedisAdapter.from_url("redis://cache:6379/0", "app")  # its own client ...
-await pool.aclose()  # ... which it closes
+await pool.close()  # ... which it closes
 ```
 
 Each value is a string key, `namespace:key`, expired by the server itself. Reads fetch many keys
@@ -190,6 +191,9 @@ deletes its version. Nothing is listed or scanned, so invalidating costs the sam
 items carry the tag. Versions read are trusted for `known_tag_versions_ttl` seconds (0.15 by
 default), which is how soon an invalidation elsewhere reaches this process. Items saved as
 deferred take their versions when committed, so an invalidation meanwhile does not apply to them.
+A tag's first version is given one save at a time in a process; two processes giving one at the
+same moment may each keep their own, and the items of the one that lost miss once and are
+computed again.
 
 Tagging an item of any other pool raises `LogicError`.
 
@@ -198,7 +202,9 @@ Tagging an item of any other pool raises `LogicError`.
 `get()` protects the backend three ways:
 
 - **One computation per key in a process.** Concurrent misses on one key share the first caller's
-  computation. If it fails or is cancelled, the others compute for themselves, side by side.
+  computation — and its result: they all get the very object computed, so copy it before changing
+  it; what is cached is not affected. If it fails or is cancelled, the others compute for
+  themselves, side by side.
 - **One computation per key across processes**, with a `LockRegistry`. Keys are spread over
   `slots` locks (20 by default); the caller that takes a key's slot computes and saves, the others
   wait for it and read what was saved — or compute themselves after `wait` seconds (30), so a stuck

@@ -206,6 +206,18 @@ async def test_a_default_lifetime_does_not_expire_the_versions_of_longer_lived_v
         assert (await pool.get_item("a")).is_hit()
 
 
+async def test_items_saved_concurrently_under_a_new_tag_are_all_kept(tmp_path: Path) -> None:
+    # Files suspend on every read and write, so the saves interleave as they would under load.
+    pool = TagAwareAdapter(FilesystemAdapter("app", directory=tmp_path))
+    keys = [f"k{index}" for index in range(20)]
+
+    _ = await asyncio.gather(*(_save_tagged(pool, key, "shared") for key in keys))
+
+    # A pool of its own reads the tag's version from the files, not from what it remembers.
+    again = TagAwareAdapter(FilesystemAdapter("app", directory=tmp_path))
+    assert all(item.is_hit() for item in (await again.get_items(keys)).values())
+
+
 async def test_items_saved_concurrently_under_one_tag_all_go_when_it_is_invalidated() -> None:
     pool = TagAwareAdapter(ArrayAdapter(), known_tag_versions_ttl=0)
     keys = [f"k{index}" for index in range(20)]

@@ -44,8 +44,10 @@ class ContractsMixin(CacheMixin, LoggerAware, ABC):
 
     - It is saved with how long it took, which — with its expiry — is what
       makes early recomputation possible on a later read.
-    - Concurrent misses on one key in this process share one computation. If
-      it fails or is cancelled, each of the others computes for itself.
+    - Concurrent misses on one key in this process share one computation, and
+      its result: each of them gets the very object computed, so change it
+      only after copying it. What is cached stays apart. If the computation
+      fails or is cancelled, each of the others computes for itself.
     - With a :class:`~xtr_cache.lock_registry.LockRegistry`, misses in every
       process sharing its locks share one computation too.
     - A callback reading its own key — directly or through what it calls —

@@ -51,6 +51,33 @@ async def test_concurrent_misses_on_one_key_share_one_computation() -> None:
     assert compute.calls == 1
 
 
+async def test_views_taken_before_any_computation_still_share_one() -> None:
+    pool = ArrayAdapter()
+    first, second = pool.with_sub_namespace("t"), pool.with_sub_namespace("t")
+    compute = Computation(42, held=True)
+
+    tasks = [asyncio.create_task(view.get("k", compute)) for view in (first, second)]
+    await asyncio.sleep(0)
+    compute.release()
+
+    assert await asyncio.gather(*tasks) == [42, 42]
+    assert compute.calls == 1
+
+
+async def test_callers_sharing_a_computation_share_its_result_not_the_cached_value() -> None:
+    pool = ArrayAdapter()
+    compute = Computation([1], held=True)
+
+    tasks = [asyncio.create_task(pool.get("k", compute)) for _ in range(2)]
+    await asyncio.sleep(0)
+    compute.release()
+    first, second = await asyncio.gather(*tasks)
+    first.append(2)
+
+    assert second is first
+    assert await pool.get("k", compute) == [1]
+
+
 async def test_when_the_shared_computation_fails_the_others_compute_side_by_side() -> None:
     pool = ArrayAdapter()
     failing = Computation(0, held=True, fails_with=LookupError("backend down"))

@@ -51,7 +51,7 @@ class DefaultMarshaller(MarshallerInterface):
         try:
             # Only this application writes what is read here; see the class docstring.
             # pickle.loads is typed as returning Any; what it returns is any object.
-            return cast("object", pickle.loads(value))  # noqa: S301
+            return cast("object", pickle.loads(value))  # noqa: S301 — only this application writes it
         # Unpickling can raise whatever the stored object's reconstruction raises.
         except Exception as error:
             raise MarshallingError(f"the stored value cannot be unpickled: {error}") from error

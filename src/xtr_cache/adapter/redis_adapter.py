@@ -134,7 +134,7 @@ class RedisAdapter(AbstractAdapter):
     ) -> RedisAdapter:
         """Connect to the server ``dsn`` names, on first use, and own the connection.
 
-        Close the adapter with :meth:`aclose` when done.
+        Close the adapter with :meth:`close` when done.
 
         Raises:
             InvalidArgumentError: When the scheme is not a Redis one, or the
@@ -168,10 +168,10 @@ class RedisAdapter(AbstractAdapter):
 
     @property
     def owns_connection(self) -> bool:
-        """Whether :meth:`aclose` closes the client, because :meth:`from_url` opened it."""
+        """Whether :meth:`close` closes the client, because :meth:`from_url` opened it."""
         return self._owns_connection
 
-    async def aclose(self) -> None:
+    async def close(self) -> None:
         """Close the connection, when :meth:`from_url` opened it; otherwise do nothing."""
         if self._owns_connection:
             await self._redis.aclose()

@@ -72,6 +72,15 @@ async def test_no_value_outlives_max_lifetime() -> None:
         assert not await pool.has_item("b")
 
 
+async def test_the_reported_expiry_is_capped_by_max_lifetime_too() -> None:
+    pool = ArrayAdapter(max_lifetime=5)
+
+    with mock_time("2024-04-09 12:00:00") as clock:
+        _ = await pool.save((await pool.get_item("a")).set(1).expires_after(60))
+
+        assert (await pool.get_item("a")).metadata.get("expiry") == clock.now().timestamp() + 5
+
+
 async def test_the_default_lifetime_applies_to_an_item_without_expiry() -> None:
     pool = ArrayAdapter(10)
 

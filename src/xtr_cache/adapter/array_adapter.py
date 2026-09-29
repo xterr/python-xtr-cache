@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+import dataclasses
 from typing import TYPE_CHECKING, cast, final
 
 from typing_extensions import override
 
 from xtr_cache.exception import InvalidArgumentError, MarshallingError
 from xtr_cache.marshaller.default_marshaller import DefaultMarshaller
+from xtr_cache.value_wrapper import ValueWrapper
 
 from .abstract_adapter import AbstractAdapter
 
@@ -144,6 +146,8 @@ class ArrayAdapter(AbstractAdapter):
         if self._max_lifetime and (not lifetime or lifetime > self._max_lifetime):
             lifetime = self._max_lifetime
         expiry = self._clock.now().timestamp() + lifetime if lifetime else None
+        if expiry is not None:
+            values = {id_: _capped(value, expiry) for id_, value in values.items()}
 
         failed: list[str] = []
         stored: Mapping[str, object] = values
@@ -163,3 +167,12 @@ class ArrayAdapter(AbstractAdapter):
     @override
     def __repr__(self) -> str:
         return f"{type(self).__name__}({self._default_lifetime!r})"
+
+
+def _capped(value: object, expiry: float) -> object:
+    """Return ``value``, its recorded expiry no later than ``expiry``, when the entry is."""
+    if not isinstance(value, ValueWrapper) or value.metadata.get("expiry", expiry) <= expiry:
+        return value
+    metadata = value.metadata.copy()
+    metadata["expiry"] = expiry
+    return dataclasses.replace(value, metadata=metadata)
