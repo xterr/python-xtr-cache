@@ -264,6 +264,8 @@ Everything adding this package to an application on
 
 - **Install** — `uv add "xtr-cache[di]"`; add `redis`, `sodium`, `console` or `logging` for what
   you use.
+- **Recipe** — `uv run xtr-recipes recipes:sync` does the *Activate* and *Ignore* steps below: it
+  lists `CacheBundle` and ignores `/var/`. There is no config file or environment to write.
 - **Activate** — `CacheBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`, imported
   from `xtr_cache.bundle`.
 - **Brings along** — the logging and console bundles, when those packages are installed.

@@ -51,6 +51,10 @@ logging = [
 [project.entry-points."xtr_dependency_injection.bundles"]
 cache = "xtr_cache.bundle:CacheBundle"
 
+# Advertises the recipe — what *Use in an application* takes — for recipes:sync.
+[project.entry-points."xtr_recipes"]
+cache = "xtr_cache.recipe"
+
 [dependency-groups]
 dev = [
     "basedpyright>=1.21",

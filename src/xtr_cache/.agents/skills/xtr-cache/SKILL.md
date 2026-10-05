@@ -170,6 +170,10 @@ rotation.
 
 ## Use in an application
 
+`uv run xtr-recipes recipes:sync` applies the recipe shipped with this package: it lists
+`CacheBundle` and ignores `/var/`. That is the steps below a recipe can do; the others it prints
+for you to make.
+
 1. **Install** — `uv add "xtr-cache[di]"`; add `redis`, `sodium` or `console` for what you use.
 2. **Activate** — `CacheBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`, imported from
    `xtr_cache.bundle`.
