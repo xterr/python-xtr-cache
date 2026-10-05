@@ -1,6 +1,6 @@
 [project]
 name = "xtr-cache"
-version = "2.0.0"
+version = "3.0.0"
 description = "Cache pools in memory, in files, in Redis, chained or tag-aware, with stampede protection."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,10 +22,10 @@ classifiers = [
 ]
 dependencies = [
     "typing-extensions>=4.4",
-    "xtr-cache-contracts>=2.0,<3",
-    "xtr-clock>=2.0,<3",
-    "xtr-lock>=2.0,<3",
-    "xtr-logging-contracts>=2.0,<3",
+    "xtr-cache-contracts>=3.0,<4",
+    "xtr-clock>=3.0,<4",
+    "xtr-lock>=3.0,<4",
+    "xtr-logging-contracts>=3.0,<4",
 ]
 
 [project.optional-dependencies]
@@ -36,14 +36,14 @@ sodium = [
     "pynacl>=1.5",
 ]
 di = [
-    "xtr-dependency-injection>=2.0,<3",
-    "xtr-service-contracts>=2.0,<3",
+    "xtr-dependency-injection>=3.0,<4",
+    "xtr-service-contracts>=3.0,<4",
 ]
 console = [
-    "xtr-console>=2.0,<3",
+    "xtr-console>=3.0,<4",
 ]
 logging = [
-    "xtr-logging>=2.0,<3",
+    "xtr-logging>=3.0,<4",
 ]
 
 # Advertises the bundle so debug:bundles can name it when installed but not listed.
@@ -65,10 +65,10 @@ dev = [
     "ty>=0.0.83",
     "pynacl>=1.5",
     "redis>=5.0",
-    "xtr-console>=2.0,<3",
-    "xtr-dependency-injection>=2.0,<3",
-    "xtr-logging>=2.0,<3",
-    "xtr-service-contracts>=2.0,<3",
+    "xtr-console>=3.0,<4",
+    "xtr-dependency-injection>=3.0,<4",
+    "xtr-logging>=3.0,<4",
+    "xtr-service-contracts>=3.0,<4",
 ]
 
 [build-system]
