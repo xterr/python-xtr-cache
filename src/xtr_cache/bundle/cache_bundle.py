@@ -223,15 +223,15 @@ def _pool_factory(
         config: CacheConfig,
         container: ContainerInterface,
     ) -> AsyncIterator[AdapterInterface]:
-        spec = config.pool_configs()[name]
-        built = await _build_adapters(name, spec, config, container)
+        pool_config = config.pool_configs()[name]
+        built = await _build_adapters(name, pool_config, config, container)
         layers: list[AdapterInterface] = list(built)
         if len(built) > 1:
-            layers.append(ChainAdapter(built, spec.default_lifetime))
-        if spec.tags:
+            layers.append(ChainAdapter(built, pool_config.default_lifetime))
+        if pool_config.tags:
             tags_pool = (
-                await container.get(AdapterInterface, spec.tags)
-                if isinstance(spec.tags, str)
+                await container.get(AdapterInterface, pool_config.tags)
+                if isinstance(pool_config.tags, str)
                 else None
             )
             layers.append(TagAwareAdapter(layers[-1], tags_pool))
@@ -260,13 +260,15 @@ def _pool_factory(
 
 async def _build_adapters(
     name: str,
-    spec: PoolConfig,
+    pool_config: PoolConfig,
     config: CacheConfig,
     container: ContainerInterface,
 ) -> list[AdapterInterface]:
     """Build a pool's adapters, fastest first, under the pool's namespace."""
     namespace = (
-        spec.namespace if spec.namespace is not None else _namespace(name, config.prefix_seed)
+        pool_config.namespace
+        if pool_config.namespace is not None
+        else _namespace(name, config.prefix_seed)
     )
     marshaller = await container.get(MarshallerInterface)
 
@@ -274,11 +276,11 @@ async def _build_adapters(
         AdapterFactory.create_adapter(
             await entry.resolve(container) if isinstance(entry, Reference) else entry,
             namespace,
-            spec.default_lifetime,
+            pool_config.default_lifetime,
             marshaller=marshaller,
             directory=config.directory,
         )
-        for entry in spec.adapters()
+        for entry in pool_config.adapters()
     ]
 
 
