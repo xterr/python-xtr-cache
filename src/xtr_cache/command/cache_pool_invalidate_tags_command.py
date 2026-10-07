@@ -83,11 +83,13 @@ async def _invalidate(
     invalidated = 0
     errors = False
     for name in names:
-        cache = await clearer.get_pool(name)
-        if not isinstance(cache, TagAwareCacheInterface):
+        if not clearer.is_tag_aware(name):
             if named:
                 io.error(f'Cache pool "{escape(name)}" is not tag-aware.')
                 errors = True
+            continue
+        cache = await clearer.get_pool(name)
+        if not isinstance(cache, TagAwareCacheInterface):
             continue
         if not await cache.invalidate_tags(tags):
             io.error(f'Cache tags could not be invalidated in pool "{escape(name)}".')

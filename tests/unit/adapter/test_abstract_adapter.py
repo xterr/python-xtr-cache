@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from typing import ClassVar, final
-
 import pytest
-from typing_extensions import override
 from xtr_clock.testing import mock_time
 
 from tests.support.recording_logger import RecordingLogger
@@ -179,48 +176,6 @@ def test_a_namespace_that_is_not_a_valid_key_is_refused(namespace: str, message:
 
 def test_a_namespace_may_hold_sub_namespaces() -> None:
     assert ScriptedAdapter("app:tenant").namespace == "app:tenant:"
-
-
-@final
-class _ShortIds(AbstractAdapter):
-    max_id_length: ClassVar[int | None] = 40
-
-    @override
-    async def _do_fetch(self, ids: object) -> dict[str, object]:
-        return {}
-
-    @override
-    async def _do_have(self, id_: str) -> bool:
-        return False
-
-    @override
-    async def _do_clear(self, namespace: str) -> bool:
-        return True
-
-    @override
-    async def _do_delete(self, ids: object) -> bool:
-        return True
-
-    @override
-    async def _do_save(self, values: object, lifetime: float) -> bool:
-        return True
-
-
-def test_a_key_too_long_for_the_backend_is_hashed_under_the_namespace() -> None:
-    pool = _ShortIds("ns")
-
-    short = pool._get_id("short")
-    long = pool._get_id("k" * 100)
-
-    assert short == "ns:short"
-    assert long.startswith("ns:")
-    assert len(long) <= 40
-    assert long != pool._get_id("k" * 101)
-
-
-def test_a_namespace_leaving_no_room_for_keys_is_refused() -> None:
-    with pytest.raises(InvalidArgumentError, match="16 characters at most"):
-        _ = _ShortIds("n" * 17)
 
 
 async def test_a_sub_namespace_starts_with_nothing_deferred() -> None:

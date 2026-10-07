@@ -90,6 +90,7 @@ class ChainAdapter(ContractsMixin, AdapterInterface, NamespacedPoolInterface, Pr
         found: dict[str, CacheItem] = {}
         missing = wanted
         missed: list[AdapterInterface] = []
+        written: list[AdapterInterface] = []
         for adapter in self._adapters:
             if not missing:
                 break
@@ -99,10 +100,12 @@ class ChainAdapter(ContractsMixin, AdapterInterface, NamespacedPoolInterface, Pr
                     found[key] = item
                     for faster in missed:
                         _ = await faster.save_deferred(self._copy(item))
+                        if faster not in written:
+                            written.append(faster)
             missing = [key for key in missing if key not in found]
             missed.append(adapter)
 
-        for faster in missed:
+        for faster in written:
             _ = await faster.commit()
 
         return {key: found.get(key) or CacheItem(key, clock=self._clock) for key in wanted}

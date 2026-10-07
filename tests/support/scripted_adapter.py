@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, final
+from typing import TYPE_CHECKING, final
 
 from typing_extensions import override
 
@@ -29,8 +29,6 @@ class ScriptedAdapter(AbstractAdapter):
     ``reject`` lists identifiers a save reports as
     failed. Every call is recorded in ``calls``.
     """
-
-    max_id_length: ClassVar[int | None] = None
 
     def __init__(self, namespace: str = "", default_lifetime: float = 0.0) -> None:
         super().__init__(namespace, default_lifetime)

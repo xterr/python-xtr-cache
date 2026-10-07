@@ -32,6 +32,7 @@ __all__ = ["AdapterFactory"]
 _FILESYSTEM: Final = "filesystem"
 _FILESYSTEM_PREFIX: Final = "filesystem://"
 _KEYWORDS: Final = ("array", "null", _FILESYSTEM)
+_PRUNEABLE_KEYWORDS: Final = ("array", _FILESYSTEM)
 
 
 @final
@@ -135,4 +136,18 @@ class AdapterFactory:
 
         raise InvalidArgumentError(
             f'Unsupported cache connection: "{describe_connection_scheme(connection)}".'
+        )
+
+    @staticmethod
+    def serves_pruneable(connection: object) -> bool:
+        """Tell whether ``connection`` names an adapter whose backend keeps expired values.
+
+        A memory or filesystem pool holds a value's slot until something drops
+        it, so pruning frees them; a Redis server and the null pool expire or
+        keep nothing of their own, so pruning one does nothing. Read from the
+        configuration, so a command can skip a pool it cannot prune without
+        building it — without reaching a server.
+        """
+        return isinstance(connection, str) and (
+            connection in _PRUNEABLE_KEYWORDS or connection.startswith(_FILESYSTEM_PREFIX)
         )

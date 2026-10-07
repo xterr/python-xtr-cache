@@ -54,7 +54,7 @@ from xtr_cache.adapter.contracts_mixin import ContractsMixin
 from xtr_cache.adapter.redis_adapter import RedisAdapter
 from xtr_cache.adapter.tag_aware_adapter import TagAwareAdapter
 from xtr_cache.adapter.tag_aware_adapter_interface import TagAwareAdapterInterface
-from xtr_cache.cache_pool_clearer import CachePoolClearer
+from xtr_cache.cache_pool_clearer import CachePoolClearer, PoolCapabilities
 from xtr_cache.exception import InvalidArgumentError
 from xtr_cache.lock_registry import LockRegistry
 from xtr_cache.marshaller.default_marshaller import DefaultMarshaller
@@ -197,7 +197,26 @@ async def _lock_registry(
 
 def _cache_pool_clearer(config: CacheConfig, container: ContainerInterface) -> CachePoolClearer:
     """Name every pool for the commands, each built only when a command first needs it."""
-    return CachePoolClearer({name: _provider(container, name) for name in config.pool_configs()})
+    configs = config.pool_configs()
+    return CachePoolClearer(
+        {name: _provider(container, name) for name in configs},
+        capabilities={name: _capabilities(pool) for name, pool in configs.items()},
+    )
+
+
+def _capabilities(pool: PoolConfig) -> PoolCapabilities:
+    """Read what a pool can do from its configuration, so a command need not build it.
+
+    A tag-aware pool and a chain are always prunable (each wraps the pool
+    underneath), so is a single pool whose adapter keeps expired values.
+    """
+    entries = pool.adapters()
+    prunable = (
+        bool(pool.tags)
+        or len(entries) > 1
+        or any(AdapterFactory.serves_pruneable(entry) for entry in entries)
+    )
+    return PoolCapabilities(tag_aware=bool(pool.tags), prunable=prunable)
 
 
 def _provider(

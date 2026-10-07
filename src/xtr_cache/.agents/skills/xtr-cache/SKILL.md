@@ -158,7 +158,7 @@ rotation.
 
       with mock_time("2026-01-01 00:00:00") as clock:
           first = await invoices.get(7)
-          assert await invoices.get(7) is first  # a hit; nothing fetched
+          assert await invoices.get(7) == first  # a hit; a serialized pool hands back a copy
 
           clock.sleep(601)
           assert await invoices.get(7) is not first
@@ -271,7 +271,7 @@ them: it is logged, and the call misses or returns `False`.
 - Do not mutate what `get()` returned and expect the cache to keep the original — concurrent
   callers get the same object. Copy first.
 - Do not put a reserved character in a key; `{}()/\@:` raise `InvalidArgumentError`.
-- Do not run a `RedisAdapter` without a namespace on a database holding anything else — `clear()`
-  empties it — and do not leave one built by `from_url` unclosed.
+- Do not leave a `RedisAdapter` built by `from_url` unclosed. A namespace is required: without
+  one, `clear()` would empty the whole database.
 - Do not pickle from a backend others can write to. Use `SodiumMarshaller`.
 - Do not sleep in a test to let a value expire. Freeze the clock with `mock_time`.

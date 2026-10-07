@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 import asyncio
-import time
 import zlib
 from typing import TYPE_CHECKING, Final, TypeVar, cast, final
 
 from typing_extensions import override
+from xtr_clock import MonotonicClock
 from xtr_logging_contracts import LoggerAware
 
 from .exception import InvalidArgumentError
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
 
     from xtr_cache_contracts import ItemInterface
+    from xtr_clock import ClockInterface
     from xtr_lock import LockFactory
 
 __all__ = ["LockRegistry"]
@@ -48,13 +49,14 @@ class LockRegistry(LoggerAware):
     so every process agrees on which lock guards it.
     """
 
-    __slots__ = ("_evicted", "_locks", "_prefix", "_slots", "_wait")
+    __slots__ = ("_clock", "_evicted", "_locks", "_prefix", "_slots", "_wait")
 
     _locks: LockFactory
     _slots: int
     _evicted: dict[int, float]
     _wait: float
     _prefix: str
+    _clock: ClockInterface
 
     def __init__(
         self,
@@ -63,6 +65,7 @@ class LockRegistry(LoggerAware):
         slots: int = DEFAULT_SLOTS,
         wait: float = DEFAULT_WAIT,
         prefix: str = "xtr-cache.",
+        clock: ClockInterface | None = None,
     ) -> None:
         """Take slots' locks from ``locks``.
 
@@ -71,6 +74,8 @@ class LockRegistry(LoggerAware):
             slots: How many values may be computed at once.
             wait: How long to wait for another caller's computation, in seconds.
             prefix: Put in front of each slot's number to name its lock.
+            clock: What the eviction window is timed against; a monotonic clock
+                when omitted, so a wall-clock jump never widens or shortens it.
 
         Raises:
             InvalidArgumentError: When ``slots`` or ``wait`` is not positive.
@@ -85,6 +90,7 @@ class LockRegistry(LoggerAware):
         self._evicted = {}
         self._wait = wait
         self._prefix = prefix
+        self._clock = clock if clock is not None else MonotonicClock()
 
     async def compute(
         self,
@@ -147,14 +153,14 @@ class LockRegistry(LoggerAware):
         until = self._evicted.get(slot)
         if until is None:
             return slot
-        if time.monotonic() < until:
+        if self._clock.now().timestamp() < until:
             return None
         del self._evicted[slot]
         return slot
 
     def _evict(self, slot: int) -> None:
         """Set ``slot`` aside for a while, its holder stuck, so later callers do not wait on it."""
-        self._evicted[slot] = time.monotonic() + self._wait
+        self._evicted[slot] = self._clock.now().timestamp() + self._wait
 
     @property
     def slots(self) -> int:

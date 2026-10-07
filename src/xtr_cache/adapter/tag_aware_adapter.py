@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Final, Self, final
 from typing_extensions import override
 from xtr_cache_contracts import Metadata, NamespacedPoolInterface
 
+from xtr_cache._internal_key import InternalKey
 from xtr_cache.cache_item import CacheItem
 from xtr_cache.pruneable_interface import PruneableInterface
 from xtr_cache.value_wrapper import ValueWrapper
@@ -29,11 +30,14 @@ if TYPE_CHECKING:
 __all__ = ["TagAwareAdapter"]
 
 TAGS_PREFIX: Final = "\x01tags\x01"
-
-#: How long a tag's version is kept. Given explicitly, so a tags pool's default
-#: lifetime never drops a version before the values that were saved with it.
-_TAG_VERSION_LIFETIME: Final = 100 * 365 * 86400
 """What the key holding a tag's version starts with, so it never meets a user key."""
+
+_TAG_VERSION_LIFETIME: Final = 100 * 365 * 86400
+"""How long a tag's version is kept.
+
+Given explicitly, so a tags pool's default lifetime never drops a version
+before the values that were saved with it.
+"""
 
 
 @final
@@ -99,7 +103,7 @@ class TagAwareAdapter(
     async def invalidate_tags(self, tags: Iterable[str], /) -> bool:
         ids: list[str] = []
         for tag in tags:
-            ids.append(TAGS_PREFIX + CacheItem.validate_key(tag))
+            ids.append(InternalKey(TAGS_PREFIX + CacheItem.validate_key(tag)))
             _ = self._known.pop(tag, None)
 
         return not ids or await self._tags.delete_items(ids)
@@ -200,7 +204,12 @@ class TagAwareAdapter(
         stored = inner.get()
         if not isinstance(stored, TaggedValue):
             return CacheItem(
-                key, stored, hit=True, metadata=inner.metadata, taggable=True, clock=self._clock
+                key,
+                stored,
+                hit=True,
+                metadata=inner.metadata.copy(),
+                taggable=True,
+                clock=self._clock,
             )
 
         if any(versions.get(tag) != version for tag, version in stored.versions.items()):
@@ -236,9 +245,10 @@ class TagAwareAdapter(
                 unknown.append(tag)
 
         if unknown:
-            items = await self._tags.get_items([TAGS_PREFIX + tag for tag in unknown])
+            keys = {tag: InternalKey(TAGS_PREFIX + tag) for tag in unknown}
+            items = await self._tags.get_items(keys.values())
             for tag in unknown:
-                item = items[TAGS_PREFIX + tag]
+                item = items[keys[tag]]
                 version = item.get() if item.is_hit() else None
                 versions[tag] = version if isinstance(version, str) else None
                 self._remember(tag, versions[tag], now)
@@ -267,7 +277,8 @@ class TagAwareAdapter(
             created = [tag for tag, found in current.items() if found is None]
 
             for tag in created:
-                version = CacheItem(TAGS_PREFIX + tag, versions[tag], clock=self._clock)
+                key = InternalKey(TAGS_PREFIX + tag)
+                version = CacheItem(key, versions[tag], clock=self._clock)
                 _ = await self._tags.save_deferred(version.expires_after(_TAG_VERSION_LIFETIME))
             # A version the tags pool did not keep must not be trusted here while others miss it.
             if created and await self._tags.commit():

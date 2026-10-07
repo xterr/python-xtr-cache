@@ -73,3 +73,16 @@ def test_a_pool_may_keep_its_tags_in_another_pool_but_not_in_itself_or_nowhere()
         _ = CacheConfig(pools={"items": PoolConfig(tags="items")})
     with pytest.raises(InvalidArgumentError, match='keeps its tags in "nope"'):
         _ = CacheConfig(pools={"items": PoolConfig(tags="nope")})
+
+
+def test_a_tags_cycle_of_any_length_is_refused_naming_the_pools() -> None:
+    with pytest.raises(InvalidArgumentError, match=r"tags cycle: a -> b -> a"):
+        _ = CacheConfig(pools={"a": PoolConfig(tags="b"), "b": PoolConfig(tags="a")})
+    with pytest.raises(InvalidArgumentError, match=r"tags cycle: a -> b -> c -> a"):
+        _ = CacheConfig(
+            pools={
+                "a": PoolConfig(tags="b"),
+                "b": PoolConfig(tags="c"),
+                "c": PoolConfig(tags="a"),
+            },
+        )

@@ -7,7 +7,7 @@ from xtr_clock.testing import mock_time
 
 from tests.support.pool_conformance import PoolTests
 from tests.support.recording_logger import RecordingLogger
-from xtr_cache import ArrayAdapter, InvalidArgumentError
+from xtr_cache import ArrayAdapter, InvalidArgumentError, PruneableInterface
 
 pytestmark = pytest.mark.anyio
 
@@ -120,3 +120,31 @@ def test_a_negative_limit_is_refused() -> None:
 
 def test_it_describes_itself() -> None:
     assert repr(ArrayAdapter(5)) == "ArrayAdapter(5)"
+
+
+async def test_pruning_drops_expired_entries() -> None:
+    pool = ArrayAdapter(store_serialized=False)
+
+    with mock_time("2024-04-09 12:00:00") as clock:
+        _ = await pool.save((await pool.get_item("short")).set(1).expires_after(1))
+        _ = await pool.save((await pool.get_item("forever")).set(1))
+        clock.sleep(2)
+
+        assert await pool.prune()
+
+    assert set(pool._values) == {"forever"}
+    assert isinstance(pool, PruneableInterface)
+
+
+async def test_expired_entries_are_swept_every_thousand_saves() -> None:
+    pool = ArrayAdapter(store_serialized=False)
+
+    with mock_time("2024-04-09 12:00:00") as clock:
+        _ = await pool.save((await pool.get_item("old")).set(1).expires_after(1))
+        clock.sleep(2)
+        assert "old" in pool._values  # still there, read lazily drops it
+
+        for index in range(1000):
+            _ = await pool.save((await pool.get_item(f"k{index}")).set(1))
+
+        assert "old" not in pool._values

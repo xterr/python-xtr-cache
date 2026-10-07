@@ -70,6 +70,17 @@ async def test_reading_several_keys_fills_the_faster_pools_with_each_hit() -> No
     assert (await fast.get_item("b")).get() == "slow"
 
 
+async def test_reading_commits_only_the_levels_it_wrote_into() -> None:
+    fast, slow = ArrayAdapter(), ArrayAdapter()
+    chain = ChainAdapter([fast, slow])
+    # Queued on the slow level the chain reads from, not writes to: a read must leave it alone.
+    _ = await slow.save_deferred((await slow.get_item("queued")).set(1))
+
+    _ = await chain.get_items(["absent"])
+
+    assert "queued" not in slow.values()
+
+
 async def test_writes_deletes_and_clears_reach_every_pool() -> None:
     first, second = ArrayAdapter(), ArrayAdapter()
     chain = ChainAdapter([first, second])

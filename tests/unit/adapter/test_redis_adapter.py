@@ -38,13 +38,13 @@ async def test_values_are_stored_under_the_namespace_as_the_marshaller_encoded_t
 
 async def test_the_lifetime_is_sent_in_milliseconds_and_none_for_no_limit() -> None:
     redis = FakeRedis()
-    pool = RedisAdapter(redis.as_client(), default_lifetime=1.5)
+    pool = RedisAdapter(redis.as_client(), "ns", default_lifetime=1.5)
 
     _ = await pool.save((await pool.get_item("timed")).set(1))
-    _ = await RedisAdapter(redis.as_client()).save((await pool.get_item("forever")).set(1))
+    _ = await RedisAdapter(redis.as_client(), "ns").save((await pool.get_item("forever")).set(1))
 
-    assert redis.data["timed"][1] is not None
-    assert redis.data["forever"][1] is None
+    assert redis.data["ns:timed"][1] is not None
+    assert redis.data["ns:forever"][1] is None
 
 
 async def test_clearing_a_namespace_leaves_every_other_key_alone() -> None:
@@ -96,22 +96,22 @@ async def test_a_value_written_by_something_else_reads_as_a_miss_and_is_logged()
 
 async def test_a_key_the_server_refuses_is_reported_and_the_rest_saved() -> None:
     redis = FakeRedis()
-    pool = RedisAdapter(redis.as_client())
+    pool = RedisAdapter(redis.as_client(), "ns")
     logger = RecordingLogger()
     pool.set_logger(logger)
-    redis.failing.add("b")
+    redis.failing.add("ns:b")
     for key in ("a", "b"):
         _ = await pool.save_deferred((await pool.get_item(key)).set(key))
 
     assert not await pool.commit()
 
-    assert set(redis.data) == {"a"}
+    assert set(redis.data) == {"ns:a"}
     assert 'Failed to save key "{key}": {reason}' in logger.messages("warning")
 
 
 async def test_a_value_that_does_not_encode_is_not_sent() -> None:
     redis = FakeRedis()
-    pool = RedisAdapter(redis.as_client())
+    pool = RedisAdapter(redis.as_client(), "ns")
 
     assert not await pool.save((await pool.get_item("a")).set(lambda: None))
 
@@ -142,7 +142,12 @@ def test_the_redis_extra_missing_is_named(monkeypatch: pytest.MonkeyPatch) -> No
 
 def test_a_client_decoding_replies_into_text_is_refused() -> None:
     with pytest.raises(InvalidArgumentError, match="decode_responses=True"):
-        _ = RedisAdapter(FakeRedis(decode_responses=True).as_client())
+        _ = RedisAdapter(FakeRedis(decode_responses=True).as_client(), "ns")
+
+
+def test_a_redis_pool_needs_a_namespace() -> None:
+    with pytest.raises(InvalidArgumentError, match="needs a namespace"):
+        _ = RedisAdapter(FakeRedis().as_client(), "")
 
 
 async def test_a_client_given_stays_the_callers() -> None:

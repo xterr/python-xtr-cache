@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, ClassVar, Final, Self
 from typing_extensions import override
 from xtr_cache_contracts import InvalidArgumentError, NamespacedPoolInterface
 
-from xtr_cache._digest import urlsafe_digest
 from xtr_cache.cache_item import CacheItem
 from xtr_cache.exception.marshalling_error import MarshallingError
 
@@ -45,16 +44,11 @@ class AbstractAdapter(
     cannot be reached makes reads miss and writes return ``False``; the code
     caching keeps running.
 
-    An identifier is the pool's namespace followed by the key. A backend with
-    a limit on identifier length sets :attr:`max_id_length`, and keys that
-    would exceed it are hashed.
+    An identifier is the pool's namespace followed by the key.
     """
 
     NS_SEPARATOR: ClassVar[str] = ":"
     """What separates a namespace from what follows it in an identifier."""
-
-    max_id_length: ClassVar[int | None] = None
-    """The longest identifier the backend takes, or ``None`` for no limit."""
 
     _namespace: str
     _default_lifetime: float
@@ -80,8 +74,7 @@ class AbstractAdapter(
 
         Raises:
             InvalidArgumentError: When ``namespace`` is not a valid key once
-                its separators are removed, has an empty sub-namespace, or
-                leaves no room for keys within :attr:`max_id_length`.
+                its separators are removed, or has an empty sub-namespace.
         """
         if namespace:
             if self.NS_SEPARATOR * 2 in namespace:
@@ -89,11 +82,6 @@ class AbstractAdapter(
                     f'Cache namespace "{namespace}" contains an empty sub-namespace.',
                 )
             _ = CacheItem.validate_key(namespace.replace(self.NS_SEPARATOR, ""))
-            if self.max_id_length is not None and len(namespace) > self.max_id_length - 24:
-                raise InvalidArgumentError(
-                    f"A cache namespace must be {self.max_id_length - 24} characters at most, "
-                    f"got {len(namespace)}.",
-                )
             namespace += self.NS_SEPARATOR
 
         self._namespace = namespace
@@ -314,16 +302,12 @@ class AbstractAdapter(
         return CacheItem.from_stored(key, stored, clock=self._clock)
 
     def _get_id(self, key: str) -> str:
-        """Return the backend identifier of ``key``, hashing it when it would be too long.
+        """Return the backend identifier of ``key``: the namespace, then the key.
 
         Raises:
             InvalidArgumentError: When ``key`` is not a valid key.
         """
-        id_ = self._namespace + CacheItem.validate_key(key)
-        if self.max_id_length is None or len(id_) <= self.max_id_length:
-            return id_
-
-        return self._namespace + urlsafe_digest(key, size=16) + self.NS_SEPARATOR
+        return self._namespace + CacheItem.validate_key(key)
 
     def _unmarshall_found(
         self,

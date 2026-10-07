@@ -47,6 +47,14 @@ _HEADER_BYTES: Final = 4096
 _PRIVATE_MODE: Final = 0o700
 """The default directory's mode: in the shared temporary directory, only its owner may enter."""
 
+_PRIVATE_FILE_MODE: Final = 0o600
+_PRIVATE_DIR_MODE: Final = 0o700
+"""A pool's own files and directories, reachable by their owner alone, the default."""
+
+_SHARED_FILE_MODE: Final = 0o666
+_SHARED_DIR_MODE: Final = 0o777
+"""The modes ``shared`` opts into, so processes run as other users can read the files."""
+
 
 @final
 class FilesystemAdapter(AbstractAdapter, PruneableInterface):
@@ -60,6 +68,15 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
     Nothing is created until the first value is written. An expired file is
     removed when it is read; :meth:`prune` removes the ones nobody reads.
 
+    Files are the owner's alone (``0o600``) in directories the owner alone may
+    enter (``0o700``), unless ``shared`` opens them to everyone (``0o666`` and
+    ``0o777``, as the umask allows) so processes run as other users can read
+    them. A shared directory is dangerous with the pickle marshaller: anyone
+    who can write a file into it chooses what this process unpickles, which is
+    code execution. Share a directory only with a marshaller that
+    authenticates what it reads, such as
+    :class:`~xtr_cache.marshaller.SodiumMarshaller`.
+
     Without a directory of its own, a pool keeps its files in the system's
     temporary directory, where every user may create one first. Values are
     unpickled when read, so there the directory is made for this user alone,
@@ -71,13 +88,16 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
     _marshaller: MarshallerInterface
     _private_root: Path | None
     _private_root_checked: bool
+    _file_mode: int
+    _dir_mode: int
 
-    def __init__(
+    def __init__(  # noqa: PLR0913 — every option past the directory is keyword-only.
         self,
         namespace: str = "",
         default_lifetime: float = 0.0,
         directory: str | os.PathLike[str] | None = None,
         *,
+        shared: bool = False,
         marshaller: MarshallerInterface | None = None,
         clock: ClockInterface | None = None,
     ) -> None:
@@ -90,6 +110,11 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
                 expiry; ``0`` for no limit.
             directory: Where the files go. ``None`` uses ``xtr-cache`` under
                 the system's temporary directory.
+            shared: Create files and directories readable by every user
+                (``0o666``/``0o777``, as the umask allows) rather than the
+                owner alone (``0o600``/``0o700``). Dangerous with pickle: a
+                shared directory lets anyone choose what is unpickled, which
+                is code execution. Pair it with an authenticating marshaller.
             marshaller: What turns values into bytes. Pickle when omitted.
             clock: What lifetimes are counted from. ``None`` reads the clock
                 in force.
@@ -108,6 +133,8 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
         self._private_root = base if directory is None else None
         self._private_root_checked = False
         self._marshaller = marshaller if marshaller is not None else DefaultMarshaller()
+        self._file_mode = _SHARED_FILE_MODE if shared else _PRIVATE_FILE_MODE
+        self._dir_mode = _SHARED_DIR_MODE if shared else _PRIVATE_DIR_MODE
 
     @property
     def directory(self) -> Path:
@@ -203,10 +230,10 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
             header = f"{expiry:.6f}\n{quote(id_, safe='')}\n".encode("ascii")
             temporary = path.parent / f"{_TEMPORARY_PREFIX}{secrets.token_hex(8)}"
             try:
-                path.parent.mkdir(parents=True, exist_ok=True)
-                # Readable by whoever the umask lets read it, so processes run as other users
-                # can share the directory.
-                with os.fdopen(os.open(temporary, _WRITE_FLAGS, 0o666), "wb") as file:
+                path.parent.mkdir(self._dir_mode, parents=True, exist_ok=True)
+                # The owner's alone by default; readable by whoever the umask lets read it
+                # when shared, so processes run as other users can share the directory.
+                with os.fdopen(os.open(temporary, _WRITE_FLAGS, self._file_mode), "wb") as file:
                     _ = file.write(header)
                     _ = file.write(data)
                 _ = temporary.replace(path)

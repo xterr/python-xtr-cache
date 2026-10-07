@@ -25,6 +25,30 @@ def _no_pools() -> dict[str, PoolEntry]:
     return {}
 
 
+def _refuse_tags_cycles(edges: Mapping[str, str]) -> None:
+    """Refuse a cycle in the pools' tags references, of any length, naming its pools.
+
+    Each pool keeping its tags in another points at one pool only, so the
+    references form a functional graph: a walk from any pool revisits a pool
+    exactly when it is caught in a cycle. A cycle would make building one of
+    its pools need itself, so it is refused before anything is built.
+
+    Raises:
+        InvalidArgumentError: When the tags references form a cycle.
+    """
+    for start in edges:
+        seen: list[str] = []
+        node = start
+        while node in edges:
+            if node in seen:
+                cycle = [*seen[seen.index(node) :], node]
+                raise InvalidArgumentError(
+                    f"The cache pools form a tags cycle: {' -> '.join(cycle)}.",
+                )
+            seen.append(node)
+            node = edges[node]
+
+
 @dataclass(frozen=True, slots=True)
 class CacheConfig:
     """Which cache pools exist, and what each keeps its values in.
@@ -82,6 +106,7 @@ class CacheConfig:
             InvalidArgumentError: When the configuration cannot be read.
         """
         _ = PoolConfig(adapter=self.app)
+        edges: dict[str, str] = {}
         for name, entry in self.pools.items():
             if not isinstance(name, str) or not name:  # pyright: ignore[reportUnnecessaryIsInstance] -- configs are written by hand; the annotation is not enforced
                 raise InvalidArgumentError(f"A cache pool needs a non-empty name, got {name!r}.")
@@ -96,6 +121,9 @@ class CacheConfig:
                     f'The "{name}" cache pool keeps its tags in "{entry.tags}", '
                     f"which is not another pool.",
                 )
+            elif isinstance(entry.tags, str):
+                edges[name] = entry.tags
+        _refuse_tags_cycles(edges)
 
     def pool_configs(self) -> dict[str, PoolConfig]:
         """Return every pool, ``app`` first, each with its adapters resolved to a tuple."""

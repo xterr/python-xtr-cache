@@ -86,7 +86,7 @@ class RedisAdapter(AbstractAdapter):
     def __init__(
         self,
         redis: Redis,
-        namespace: str = "",
+        namespace: str,
         default_lifetime: float = 0.0,
         *,
         marshaller: MarshallerInterface | None = None,
@@ -96,8 +96,9 @@ class RedisAdapter(AbstractAdapter):
 
         Args:
             redis: An asyncio client.
-            namespace: Put in front of every key. Set one when the database
-                holds anything else.
+            namespace: Put in front of every key, and required: without one
+                :meth:`clear` unlinks every key in the database, not only this
+                pool's.
             default_lifetime: Seconds a value lives when its item sets no
                 expiry; ``0`` for no limit.
             marshaller: What turns values into bytes. Pickle when omitted.
@@ -105,8 +106,9 @@ class RedisAdapter(AbstractAdapter):
                 clock in force.
 
         Raises:
-            InvalidArgumentError: When the client decodes replies into text:
-                stored values are bytes, and would never read back.
+            InvalidArgumentError: When ``namespace`` is empty, or the client
+                decodes replies into text — stored values are bytes, and would
+                never read back.
         """
         # The client is typed for its blocking twin too; see _Client.
         client = cast("_Client", cast("object", redis))
@@ -114,6 +116,11 @@ class RedisAdapter(AbstractAdapter):
             raise InvalidArgumentError(
                 "A Redis cache pool needs a client returning bytes; "
                 "this one was created with decode_responses=True.",
+            )
+        if not namespace:
+            raise InvalidArgumentError(
+                "A Redis cache pool needs a namespace: clearing it unlinks every "
+                "key under the namespace, and empties the whole database without one.",
             )
 
         super().__init__(namespace, default_lifetime, clock=clock)
@@ -126,7 +133,7 @@ class RedisAdapter(AbstractAdapter):
     def from_url(
         cls,
         dsn: str,
-        namespace: str = "",
+        namespace: str,
         default_lifetime: float = 0.0,
         *,
         marshaller: MarshallerInterface | None = None,

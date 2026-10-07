@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-import time
 from typing import TYPE_CHECKING, final
 
 import pytest
+from xtr_clock import MockClock
 from xtr_lock import InMemoryStore, LockFactory
 
 from tests.support.recording_logger import RecordingLogger
@@ -12,6 +12,8 @@ from xtr_cache import ArrayAdapter, CacheItem, InvalidArgumentError, ItemInterfa
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+
+    from xtr_clock import ClockInterface
 
 pytestmark = pytest.mark.anyio
 
@@ -21,8 +23,9 @@ def _registry(
     *,
     slots: int = 20,
     wait: float = 30.0,
+    clock: ClockInterface | None = None,
 ) -> tuple[LockRegistry, RecordingLogger]:
-    registry = LockRegistry(LockFactory(store), slots=slots, wait=wait)
+    registry = LockRegistry(LockFactory(store), slots=slots, wait=wait, clock=clock)
     logger = RecordingLogger()
     registry.set_logger(logger)
     return registry, logger
@@ -165,17 +168,15 @@ async def test_setting_a_slot_aside_leaves_every_other_key_on_its_own_slot() -> 
     assert await holder.finish() == "late"
 
 
-async def test_a_slot_set_aside_is_tried_again_once_the_wait_has_passed(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
+async def test_a_slot_set_aside_is_tried_again_once_the_wait_has_passed() -> None:
     store = InMemoryStore()
+    clock = MockClock("2024-04-09 12:00:00")
     holder = _Holder(_registry(store)[0], "late")
-    waiter, logger = _registry(store, wait=0.05)
+    waiter, logger = _registry(store, wait=0.05, clock=clock)
     await holder.start()
     _ = await waiter.compute("k", _mine, _unreachable)
     _ = await holder.finish()
-    later = time.monotonic() + 1
-    monkeypatch.setattr(time, "monotonic", lambda: later)
+    clock.sleep(1)
     logger.records.clear()
 
     _ = await waiter.compute("k", _mine, _unreachable)

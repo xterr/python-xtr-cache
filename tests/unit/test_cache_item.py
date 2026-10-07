@@ -80,6 +80,12 @@ def test_a_valid_key_comes_back_as_it_is() -> None:
     assert CacheItem.validate_key("user.42_a-b") == "user.42_a-b"
 
 
+@pytest.mark.parametrize("key", ["\x01tags\x01orders", "a\tb", "a\nb", "a\x7fb"])
+def test_a_key_with_a_non_printable_character_is_refused(key: str) -> None:
+    with pytest.raises(InvalidArgumentError, match="non-printable"):
+        _ = CacheItem.validate_key(key)
+
+
 def test_an_item_without_metadata_or_expiry_packs_to_its_value() -> None:
     assert CacheItem("k", [1]).pack() == [1]
 

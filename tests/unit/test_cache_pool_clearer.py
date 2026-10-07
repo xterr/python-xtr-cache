@@ -2,7 +2,15 @@ from __future__ import annotations
 
 import pytest
 
-from xtr_cache import ArrayAdapter, CacheItemPoolInterface, CachePoolClearer, InvalidArgumentError
+from xtr_cache import (
+    ArrayAdapter,
+    CacheItemPoolInterface,
+    CachePoolClearer,
+    InvalidArgumentError,
+    NullAdapter,
+    TagAwareAdapter,
+)
+from xtr_cache.cache_pool_clearer import PoolCapabilities
 
 pytestmark = pytest.mark.anyio
 
@@ -49,3 +57,32 @@ async def test_clearing_by_name_or_all_at_once() -> None:
 async def test_an_unknown_pool_is_refused() -> None:
     with pytest.raises(InvalidArgumentError, match=r'Cache pool "nope" not found\.'):
         _ = await CachePoolClearer().get_pool("nope")
+
+
+def test_capability_of_a_built_pool_is_read_from_its_type() -> None:
+    clearer = CachePoolClearer(
+        {"memory": ArrayAdapter(), "null": NullAdapter(), "tagged": TagAwareAdapter(NullAdapter())},
+    )
+
+    assert clearer.is_prunable("memory")
+    assert not clearer.is_prunable("null")
+    assert clearer.is_tag_aware("tagged")
+    assert not clearer.is_tag_aware("memory")
+
+
+async def test_capability_of_a_lazy_pool_is_answered_without_building_it() -> None:
+    async def never() -> CacheItemPoolInterface:
+        raise AssertionError  # building would reach a server
+
+    clearer = CachePoolClearer(
+        {"redis": never, "sessions": never},
+        capabilities={
+            "redis": PoolCapabilities(tag_aware=False, prunable=False),
+            "sessions": PoolCapabilities(tag_aware=True, prunable=True),
+        },
+    )
+
+    assert not clearer.is_prunable("redis")
+    assert not clearer.is_tag_aware("redis")
+    assert clearer.is_prunable("sessions")
+    assert clearer.is_tag_aware("sessions")

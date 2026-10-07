@@ -154,8 +154,8 @@ await pool.close()  # ... which it closes
 
 Each value is a string key, `namespace:key`, expired by the server itself. Reads fetch many keys
 in one round trip, writes are pipelined, and clearing scans the namespace and unlinks its keys in
-batches — so set a namespace when the database holds anything else: without one, clearing empties
-the database. A client built from a DSN gives up on a server silent for 5 seconds — a miss, or a
+batches — so a namespace is required: without one, clearing would empty the database. A client
+built from a DSN gives up on a server silent for 5 seconds — a miss, or a
 failed write — unless `?socket_timeout=` and `?socket_connect_timeout=` in the DSN say otherwise.
 One server; not a cluster, not Sentinel.
 

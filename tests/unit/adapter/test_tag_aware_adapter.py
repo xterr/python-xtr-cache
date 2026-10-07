@@ -66,6 +66,18 @@ async def test_an_item_saved_after_an_invalidation_is_a_hit_again() -> None:
     assert (await pool.get_item("a")).is_hit()
 
 
+async def test_a_user_key_cannot_reach_a_tags_version_key() -> None:
+    pool = TagAwareAdapter(ArrayAdapter(), known_tag_versions_ttl=0)
+    await _save_tagged(pool, "order.1", "orders")
+
+    with pytest.raises(InvalidArgumentError):
+        _ = await pool.delete("\x01tags\x01orders")
+
+    assert (await pool.get_item("order.1")).is_hit()
+    assert await pool.invalidate_tags(["orders"])
+    assert not (await pool.get_item("order.1")).is_hit()
+
+
 async def test_a_deferred_item_takes_its_tags_versions_when_committed() -> None:
     pool = TagAwareAdapter(ArrayAdapter(), known_tag_versions_ttl=0)
     _ = await pool.save_deferred((await pool.get_item("a")).set(1).tag("red"))

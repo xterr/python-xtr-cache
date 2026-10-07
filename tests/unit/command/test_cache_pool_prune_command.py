@@ -29,7 +29,7 @@ async def test_the_pools_that_keep_expired_values_are_pruned(
         assert await tester.execute(["cache:pool:prune"]) == ExitCode.SUCCESS
 
     assert "Pruning cache pool: files" in tester.display
-    assert "Pruning cache pool: memory" not in tester.display
+    assert "Pruning cache pool: memory" in tester.display
     assert "Successfully pruned cache pool(s)." in tester.display
     assert not [path for path in tmp_path.rglob("*") if path.is_file()]
 

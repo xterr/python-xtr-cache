@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import TYPE_CHECKING, cast, final
+from typing import TYPE_CHECKING, Final, cast, final
 
 from typing_extensions import override
 
 from xtr_cache.exception import InvalidArgumentError, MarshallingError
 from xtr_cache.marshaller.default_marshaller import DefaultMarshaller
+from xtr_cache.pruneable_interface import PruneableInterface
 from xtr_cache.value_wrapper import ValueWrapper
 
 from .abstract_adapter import AbstractAdapter
@@ -22,9 +23,12 @@ if TYPE_CHECKING:
 
 __all__ = ["ArrayAdapter"]
 
+_PRUNE_EVERY: Final = 1000
+"""How many values are saved between the sweeps that drop what has expired."""
+
 
 @final
-class ArrayAdapter(AbstractAdapter):
+class ArrayAdapter(AbstractAdapter, PruneableInterface):
     """Keeps values in a dictionary, for tests and for caching within one process.
 
     Values are stored serialized by default, so what a caller gets back is a
@@ -34,6 +38,11 @@ class ArrayAdapter(AbstractAdapter):
 
     Every method completes without awaiting, so tasks on one event loop never
     see it half-updated. Two instances share nothing.
+
+    Nothing expires an entry on its own: a read drops the one it finds expired,
+    and every ``1000`` saves sweep the rest, so a churn of short-lived keys
+    does not grow the dictionary without bound. :meth:`prune` sweeps them on
+    demand.
     """
 
     _values: dict[str, tuple[object, float | None]]
@@ -41,6 +50,7 @@ class ArrayAdapter(AbstractAdapter):
     _max_lifetime: float
     _max_items: int
     _marshaller: MarshallerInterface
+    _saves: int
 
     def __init__(  # noqa: PLR0913 — every option past the lifetime is keyword-only.
         self,
@@ -81,6 +91,7 @@ class ArrayAdapter(AbstractAdapter):
         self._max_lifetime = max_lifetime
         self._max_items = max_items
         self._marshaller = marshaller if marshaller is not None else DefaultMarshaller()
+        self._saves = 0
 
     def values(self) -> dict[str, object]:
         """Return every live value by identifier, as stored; for tests."""
@@ -90,6 +101,12 @@ class ArrayAdapter(AbstractAdapter):
             for id_, (stored, expiry) in self._values.items()
             if expiry is None or expiry > now
         }
+
+    @override
+    async def prune(self) -> bool:
+        """Drop every value whose expiry has passed."""
+        self._prune(self._clock.now().timestamp())
+        return True
 
     @override
     async def _do_fetch(self, ids: Sequence[str]) -> Mapping[str, object]:
@@ -162,7 +179,19 @@ class ArrayAdapter(AbstractAdapter):
             while len(self._values) > self._max_items:
                 del self._values[next(iter(self._values))]
 
+        self._saves += len(stored)
+        if self._saves >= _PRUNE_EVERY:
+            self._saves = 0
+            self._prune(self._clock.now().timestamp())
+
         return failed or True
+
+    def _prune(self, now: float) -> None:
+        """Drop every value whose expiry is at or before ``now``."""
+        for id_ in [
+            id_ for id_, (_, expiry) in self._values.items() if expiry is not None and expiry <= now
+        ]:
+            del self._values[id_]
 
     @override
     def __repr__(self) -> str:

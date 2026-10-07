@@ -45,8 +45,9 @@ await pool.close()  # ... which it closes
 ```
 
 Each value is one string key, `namespace:key`, expired by the server. Reads fetch many keys in one
-round trip, writes are pipelined, and `clear()` scans the namespace and unlinks in batches — so
-always set a namespace when the database holds anything else. A client built from a DSN gives up
+round trip, writes are pipelined, and `clear()` scans the namespace and unlinks in batches — so a
+namespace is required: without one, `clear()` would empty the whole database. A client built from a
+DSN gives up
 on a server silent for 5 seconds unless `?socket_timeout=` and `?socket_connect_timeout=` say
 otherwise. One server; not a cluster, not Sentinel. Needs the `redis` extra and a client returning
 bytes: one made with `decode_responses=True` raises `InvalidArgumentError`.

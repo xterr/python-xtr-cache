@@ -32,6 +32,8 @@ class CachePoolPruneCommand(PoolCommand):
 
         failed: list[str] = []
         for name in clearer.pool_names():
+            if not clearer.is_prunable(name):
+                continue
             cache = await clearer.get_pool(name)
             if not isinstance(cache, PruneableInterface):
                 continue

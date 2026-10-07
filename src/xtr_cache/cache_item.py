@@ -9,6 +9,7 @@ from typing_extensions import override
 from xtr_cache_contracts import RESERVED_CHARACTERS, InvalidArgumentError, ItemInterface, Metadata
 from xtr_clock import Clock
 
+from ._internal_key import InternalKey
 from .exception.logic_error import LogicError
 from .value_wrapper import ValueWrapper
 
@@ -115,8 +116,9 @@ class CacheItem(ItemInterface):
         """Return ``key`` when it is a valid key or tag.
 
         Raises:
-            InvalidArgumentError: When ``key`` is not a string, is empty, or
-                holds one of :data:`~xtr_cache_contracts.RESERVED_CHARACTERS`.
+            InvalidArgumentError: When ``key`` is not a string, is empty, holds
+                a non-printable character, or holds one of
+                :data:`~xtr_cache_contracts.RESERVED_CHARACTERS`.
         """
         if not isinstance(key, str):
             raise InvalidArgumentError(
@@ -124,6 +126,12 @@ class CacheItem(ItemInterface):
             )
         if not key:
             raise InvalidArgumentError("A cache key must not be empty.")
+        if isinstance(key, InternalKey):
+            return key
+        if not key.isprintable():
+            raise InvalidArgumentError(
+                f"A cache key must not contain non-printable characters, got {key!r}.",
+            )
         if any(character in RESERVED_CHARACTERS for character in key):
             raise InvalidArgumentError(
                 f'Cache key "{key}" contains one of the reserved characters '

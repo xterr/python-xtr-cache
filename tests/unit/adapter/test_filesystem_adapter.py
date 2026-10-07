@@ -168,12 +168,26 @@ def test_it_describes_itself(tmp_path: Path) -> None:
     assert repr(pool) == f"FilesystemAdapter('pool:', 5, {str(tmp_path / 'pool')!r})"
 
 
-async def test_files_are_created_as_the_umask_allows_so_other_users_can_share_them(
+@posix_only
+async def test_files_and_their_directories_are_the_owners_alone_by_default(
+    tmp_path: Path,
+) -> None:
+    pool = FilesystemAdapter("pool", directory=tmp_path)
+
+    _ = await pool.save((await pool.get_item("a")).set(1))
+
+    (path,) = _files(tmp_path)
+    assert path.stat().st_mode & 0o777 == 0o600
+    assert stat.S_IMODE(path.parent.stat().st_mode) == 0o700
+
+
+@posix_only
+async def test_shared_files_are_created_as_the_umask_allows_so_other_users_can_share_them(
     tmp_path: Path,
 ) -> None:
     umask = os.umask(0)
     _ = os.umask(umask)
-    pool = FilesystemAdapter("pool", directory=tmp_path)
+    pool = FilesystemAdapter("pool", directory=tmp_path, shared=True)
 
     _ = await pool.save((await pool.get_item("a")).set(1))
 
