@@ -29,7 +29,8 @@ backend a constructor argument:
 - 🗄️ **Six adapters** — memory, files, Redis, nowhere, a chain of them, or tag-aware on top of any.
 - 🏷️ **Tags** — invalidate every value carrying a tag at once, whatever its key.
 - 🔐 **Encryption** — values encrypted and authenticated with libsodium, for a shared backend.
-- 🧩 **A bundle** — named pools configured in Python, and `cache:pool:*` console commands.
+- 🧩 **An optional bundle** — named pools configured in Python once xtr-dependency-injection is
+  installed beside it, and `cache:pool:*` console commands with xtr-console.
 
 ```python
 from xtr_cache import FilesystemAdapter, ItemInterface
@@ -49,14 +50,16 @@ profile = await cache.get(f"profile.{user_id}", load_profile)
 
 ```sh
 uv add xtr-cache
-uv add "xtr-cache[redis]"     # RedisAdapter, on redis-py's asyncio client
-uv add "xtr-cache[sodium]"    # SodiumMarshaller, on PyNaCl
-uv add "xtr-cache[di]"        # the bundle for xtr-dependency-injection
-uv add "xtr-cache[console]"   # the cache:pool:* commands for xtr-console
+uv add "xtr-cache[redis]"                  # RedisAdapter, on redis-py's asyncio client
+uv add "xtr-cache[sodium]"                 # SodiumMarshaller, on PyNaCl
+uv add xtr-cache xtr-dependency-injection  # + the container, for the CacheBundle
+uv add xtr-console                         # beside it: the cache:pool:* commands
 ```
 
-Requires Python 3.11+. Depends on `xtr-cache-contracts`, `xtr-clock`, `xtr-lock` and
-`xtr-logging-contracts`.
+Requires Python 3.11+. Depends on `typing-extensions`, `xtr-cache-contracts`, `xtr-clock`,
+`xtr-lock` and `xtr-logging-contracts` — not on the container: the bundle is used when
+[xtr-dependency-injection](../xtr-dependency-injection) is installed beside the package, never as
+an extra, and the pools work without it.
 
 Every contract symbol is re-exported, not redefined: `xtr_cache.CacheInterface is
 xtr_cache_contracts.CacheInterface`, so a library typed against the contract receives these pools
@@ -262,8 +265,9 @@ until what it encrypted has expired.
 Everything adding this package to an application on
 [xtr-dependency-injection](../xtr-dependency-injection) takes — and, read backwards, what removing it undoes.
 
-- **Install** — `uv add "xtr-cache[di]"`; add `redis`, `sodium`, `console` or `logging` for what
-  you use.
+- **Install** — `uv add xtr-cache xtr-dependency-injection`: the bundle needs the container
+  installed beside it, never as an extra. Add `redis` or `sodium` for what you use; install
+  xtr-console beside it for the `cache:pool:*` commands, and xtr-logging for a `cache` channel.
 - **Recipe** — `uv run xtr-recipes recipes:sync` does the *Activate* and *Ignore* steps below: it
   lists `CacheBundle` and ignores `/var/`. There is no config file or environment to write.
 - **Activate** — `CacheBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`, imported
@@ -281,7 +285,9 @@ Everything adding this package to an application on
 
 ## Kernel / bundle
 
-With [xtr-dependency-injection](../xtr-dependency-injection), list the bundle and name the pools:
+With [xtr-dependency-injection](../xtr-dependency-injection) installed beside the package — it is
+not a dependency, and nothing outside `xtr_cache.bundle` needs it — list the bundle and name the
+pools:
 
 ```python
 # app/bundles.py

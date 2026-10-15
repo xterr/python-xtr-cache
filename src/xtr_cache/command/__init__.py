@@ -11,7 +11,7 @@ from xtr_cache.command import use_pools
 use_pools(CachePoolClearer({"app": FilesystemAdapter("app")}))
 ```
 
-Needs the ``console`` extra: ``xtr-cache[console]``.
+Needs xtr-console installed beside this package.
 """
 
 from __future__ import annotations

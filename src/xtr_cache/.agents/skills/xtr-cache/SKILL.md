@@ -26,8 +26,10 @@ the pool logs why.
   pool: `get_item`, `get_items`, `save`, `save_deferred`, `commit`, `delete_item`, `clear`.
 - Keys and tags are non-empty strings with none of `{}()/\@:` (`RESERVED_CHARACTERS`); letters,
   digits, `_` and `.` under 64 characters work everywhere. One key holds one type.
-- In an application: activate `CacheBundle`, name pools in `CacheConfig`, inject
-  `CacheInterface` for the `app` pool and `Annotated[CacheInterface, Target("name")]` for another.
+- In an application, with xtr-dependency-injection installed beside the package (it is not a
+  dependency): activate `CacheBundle`, name pools in `CacheConfig`, inject `CacheInterface` for
+  the `app` pool and `Annotated[CacheInterface, Target("name")]` for another. Without the
+  container every pool works the same; only `xtr_cache.bundle` needs it.
 
 ## Cache a value
 
@@ -174,7 +176,9 @@ rotation.
 `CacheBundle` and ignores `/var/`. That is the steps below a recipe can do; the others it prints
 for you to make.
 
-1. **Install** — `uv add "xtr-cache[di]"`; add `redis`, `sodium` or `console` for what you use.
+1. **Install** — `uv add xtr-cache xtr-dependency-injection`: the bundle needs the container
+   installed beside it, never as an extra. Add `redis` or `sodium` for what you use; install
+   xtr-console beside it for the `cache:pool:*` commands, and xtr-logging for a `cache` channel.
 2. **Activate** — `CacheBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`, imported from
    `xtr_cache.bundle`.
 3. **Brings along** — the logging and console bundles, when those packages are installed. With
