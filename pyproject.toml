@@ -1,6 +1,6 @@
 [project]
 name = "xtr-cache"
-version = "4.0.3"
+version = "4.0.4"
 description = "Cache pools in memory, in files, in Redis, chained or tag-aware, with stampede protection."
 readme = "README.md"
 requires-python = ">=3.11"
