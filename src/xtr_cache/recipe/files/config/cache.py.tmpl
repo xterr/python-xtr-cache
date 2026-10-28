@@ -1,0 +1,36 @@
+"""The cache pools: where cached values are kept, and for how long.
+
+The ``app`` pool exists with no configuration, on files under ``var/share/cache``, and is the
+pool a service asking for a cache with no name gets. Name more pools for values that need a
+lifetime or a backend of their own; a pool given no adapter keeps its values in ``app``'s,
+under a namespace of its own.
+
+```python
+CacheConfig(
+    app=env("CACHE_DSN"),
+    pools={
+        "sessions": PoolConfig(default_lifetime=3600),
+        "catalogue": PoolConfig(adapter=["array", "redis://localhost:6379"], tags=True),
+    },
+)
+```
+"""
+
+from __future__ import annotations
+
+from xtr_cache.bundle import CacheConfig
+from xtr_dependency_injection import configure
+
+__all__ = ["cache"]
+
+
+@configure
+def cache() -> CacheConfig:
+    """The ``app`` pool on the filesystem, and no other pool."""
+    # The app pool's adapter is "filesystem" until it is set: "array" keeps values in this
+    # process alone, and a DSN such as "redis://localhost:6379" shares them between processes.
+    # Several adapters chain, fastest first.
+    #
+    # Every pool's namespace is derived from prefix_seed, the project directory unless set, so
+    # two applications sharing one backend never read each other's values.
+    return CacheConfig()

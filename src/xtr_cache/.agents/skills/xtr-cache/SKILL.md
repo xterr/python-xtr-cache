@@ -173,20 +173,21 @@ rotation.
 ## Use in an application
 
 `uv run xtr-recipes recipes:sync` applies the recipe shipped with this package: it lists
-`CacheBundle` and ignores `/var/`. That is the steps below a recipe can do; the others it prints
-for you to make.
+`CacheBundle`, writes `<app>/config/packages/cache.py` with the bundle's own defaults, and ignores
+`/var/`. That is the steps below a recipe can do; the others it prints for you to make.
 
 1. **Install** — `uv add xtr-cache xtr-dependency-injection`: the bundle needs the container
    installed beside it, never as an extra. Add `redis` or `sodium` for what you use; install
    xtr-console beside it for the `cache:pool:*` commands, and xtr-logging for a `cache` channel.
-2. **Activate** — `CacheBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`, imported from
+2. **Activate** — `CacheBundle: {"all": True}` in `BUNDLES` in `<app>/config/bundles.py`, imported from
    `xtr_cache.bundle`.
 3. **Brings along** — the logging and console bundles, when those packages are installed. With
    logging, a `cache` channel is added and every pool logs there.
-4. **Configure** — optional; with no configuration there is one `app` pool on files:
+4. **Configure** — the recipe writes `<app>/config/packages/cache.py` holding the defaults, one
+   `app` pool on files, and that is where pools and adapters go:
 
    ```python
-   # <app>/config/cache.py
+   # <app>/config/packages/cache.py
    from xtr_dependency_injection import configure, env
 
    from xtr_cache.bundle import CacheConfig, PoolConfig
@@ -241,8 +242,9 @@ for you to make.
 8. **Check** — `debug:bundles` shows `cache` as `listed` and `active`.
    `cache:pool:list`, `cache:pool:clear`, `cache:pool:delete`, `cache:pool:invalidate-tags` and
    `cache:pool:prune` are there once the console bundle is active.
-9. **Remove** — drop the `BUNDLES` entry, delete `<app>/config/cache.py`, then
-   `uv remove xtr-cache`.
+9. **Remove** — drop the `BUNDLES` entry; `uv run xtr-recipes recipes:remove xtr-cache` deletes
+   `<app>/config/packages/cache.py`, unless you edited it, in which case it is moved aside to
+   `cache.py.removed`. Then `uv remove xtr-cache`.
 
 Without a container, hand the commands their pools once and import `xtr_cache.command` before the
 application runs:

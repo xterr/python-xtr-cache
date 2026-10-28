@@ -268,19 +268,21 @@ Everything adding this package to an application on
 - **Install** — `uv add xtr-cache xtr-dependency-injection`: the bundle needs the container
   installed beside it, never as an extra. Add `redis` or `sodium` for what you use; install
   xtr-console beside it for the `cache:pool:*` commands, and xtr-logging for a `cache` channel.
-- **Recipe** — `uv run xtr-recipes recipes:sync` does the *Activate* and *Ignore* steps below: it
-  lists `CacheBundle` and ignores `/var/`. There is no config file or environment to write.
-- **Activate** — `CacheBundle: {"all": True}` in `BUNDLES` in `<app>/bundles.py`, imported
+- **Recipe** — `uv run xtr-recipes recipes:sync` does the *Activate*, *Configure* and *Ignore*
+  steps below: it lists `CacheBundle`, writes `<app>/config/packages/cache.py` with the bundle's
+  own defaults, and ignores `/var/`. There is no environment to write.
+- **Activate** — `CacheBundle: {"all": True}` in `BUNDLES` in `<app>/config/bundles.py`, imported
   from `xtr_cache.bundle`.
 - **Brings along** — the logging and console bundles, when those packages are installed.
-- **Configure** — optional: with no configuration there is one `app` pool on files. Pools,
-  adapters and the stampede lock go in `<app>/config/cache.py`, a `@configure` function
-  returning `CacheConfig` — see [Kernel / bundle](#kernel--bundle).
+- **Configure** — optional: the recipe writes `<app>/config/packages/cache.py` holding the
+  defaults, one `app` pool on files. Pools, adapters and the stampede lock go in that same
+  `@configure` function returning `CacheConfig` — see [Kernel / bundle](#kernel--bundle).
 - **Environment** — nothing required. A DSN given as `env(...)` must be set when the
   application boots: booting checks every pool.
 - **Ignore** — `var/`: files live under `kernel.share_dir`, `var/share` in the project.
-- **Remove** — drop the `BUNDLES` entry, delete `<app>/config/cache.py`, then
-  `uv remove xtr-cache`.
+- **Remove** — drop the `BUNDLES` entry; `uv run xtr-recipes recipes:remove xtr-cache` deletes
+  `<app>/config/packages/cache.py`, unless you edited it, in which case it is moved aside to
+  `cache.py.removed`. Then `uv remove xtr-cache`.
 - **Check** — `debug:bundles` shows `cache` as `listed` and `active`.
 
 ## Kernel / bundle
@@ -290,14 +292,14 @@ not a dependency, and nothing outside `xtr_cache.bundle` needs it — list the b
 pools:
 
 ```python
-# app/bundles.py
+# app/config/bundles.py
 from xtr_cache.bundle import CacheBundle
 
 BUNDLES = {CacheBundle: {"all": True}}
 ```
 
 ```python
-# app/config/cache.py
+# app/config/packages/cache.py
 from xtr_dependency_injection import configure, env
 from xtr_cache.bundle import CacheConfig, PoolConfig
 

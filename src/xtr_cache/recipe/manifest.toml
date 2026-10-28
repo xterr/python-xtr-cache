@@ -5,10 +5,11 @@
 # "<module>:<class>" = the environments it is listed with, exactly as in BUNDLES.
 "xtr_cache.bundle:CacheBundle" = { all = true }
 
-# No [files]: configuring is optional. With none there is one "app" pool on
-# files, and nothing is opened until a pool is first asked for. An application
-# that wants pools, adapters or a stampede lock of its own writes
-# config/cache.py itself.
+[files]
+# Destination under the application package = template under this recipe.
+# The bundle's own defaults written out — one "app" pool on files, nothing opened
+# until a pool is first asked for — as the place pools and adapters go.
+"config/packages/cache.py" = "files/config/cache.py.tmpl"
 
 # No [env]: nothing is required. A DSN an application gives as env(...) must be
 # set when it boots, because booting checks every pool.
