@@ -1,6 +1,6 @@
 [project]
 name = "xtr-cache"
-version = "4.1.0"
+version = "5.0.0"
 description = "Cache pools in memory, in files, in Redis, chained or tag-aware, with stampede protection."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -22,10 +22,10 @@ classifiers = [
 ]
 dependencies = [
     "typing-extensions>=4.4",
-    "xtr-cache-contracts>=4.0,<5",
-    "xtr-clock>=4.0,<5",
-    "xtr-lock>=4.0,<5",
-    "xtr-logging-contracts>=4.0,<5",
+    "xtr-cache-contracts>=5.0,<6",
+    "xtr-clock>=5.0,<6",
+    "xtr-lock>=5.0,<6",
+    "xtr-logging-contracts>=5.0,<6",
 ]
 
 [project.optional-dependencies]
@@ -55,10 +55,10 @@ dev = [
     "ty>=0.0.83",
     "pynacl>=1.5",
     "redis>=5.0",
-    "xtr-console>=4.0,<5",
-    "xtr-dependency-injection>=4.0,<5",
-    "xtr-logging>=4.0,<5",
-    "xtr-service-contracts>=4.0,<5",
+    "xtr-console>=5.0,<6",
+    "xtr-dependency-injection>=5.0,<6",
+    "xtr-logging>=5.0,<6",
+    "xtr-service-contracts>=5.0,<6",
 ]
 
 [build-system]
