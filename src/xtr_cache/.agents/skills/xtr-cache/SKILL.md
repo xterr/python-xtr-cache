@@ -242,6 +242,7 @@ rotation.
 8. **Check** — `debug:bundles` shows `cache` as `listed` and `active`.
    `cache:pool:list`, `cache:pool:clear`, `cache:pool:delete`, `cache:pool:invalidate-tags` and
    `cache:pool:prune` are there once the console bundle is active.
+   The console bundle's `cache:clear` empties every pool too.
 9. **Remove** — drop the `BUNDLES` entry; `uv run xtr-recipes recipes:remove xtr-cache` deletes
    `<app>/config/packages/cache.py`, unless you edited it, in which case it is moved aside to
    `cache.py.removed`. Then `uv remove xtr-cache`.

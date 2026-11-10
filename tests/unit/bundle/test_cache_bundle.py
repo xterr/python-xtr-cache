@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 from redis.asyncio import Redis
 from xtr_console import Application, ApplicationTester, ExitCode
-from xtr_dependency_injection import Kernel, ServicesResetter
+from xtr_dependency_injection import ChainCacheClearer, Kernel, ServicesResetter
 from xtr_dependency_injection.exception import ServiceResolutionError
 from xtr_dependency_injection.kernel import kernel as kernel_module
 from xtr_dependency_injection.testing import assert_zero_config
@@ -72,6 +72,18 @@ async def test_the_app_pool_is_provided_under_every_interface_with_and_without_a
             assert await booted.container.get(interface, "app") is pool
 
     assert isinstance(pool, ArrayAdapter)
+
+
+async def test_clearing_the_kernel_cache_empties_every_pool(tmp_path: Path) -> None:
+    async with await _kernel(tmp_path).boot() as booted:
+        pool = await _pool(booted, "app")
+        item = await pool.get_item("greeting")
+        _ = item.set("hello")
+        assert await pool.save(item)
+
+        await (await booted.container.get(ChainCacheClearer)).clear(tmp_path / "var" / "cache")
+
+        assert not await pool.has_item("greeting")
 
 
 async def test_each_pool_gets_the_adapter_it_names(tmp_path: Path) -> None:

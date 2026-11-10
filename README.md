@@ -380,6 +380,9 @@ provides, which the application keeps closing.
 | `cache:pool:invalidate-tags TAG… [-p POOL]` | Invalidates tags in the named pools, or every tag-aware one |
 | `cache:pool:prune` | Removes expired values from every pool that keeps them |
 
+The console bundle's `cache:clear` empties every pool as well: the bundle registers a kernel cache
+clearer for them, since a pool lives outside `kernel.cache_dir`.
+
 Without a container, hand them pools once, and import `xtr_cache.command` before the application
 runs:
 

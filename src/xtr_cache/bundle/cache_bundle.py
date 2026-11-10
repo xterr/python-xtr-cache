@@ -8,7 +8,8 @@ An application listing :class:`CacheBundle` gets every pool of its
 interfaces for a pool with tags — each qualified by the pool's name, and the
 ``app`` pool without a qualifier too. When the logging bundle is active, a
 ``cache`` channel is added and every pool logs there; when the console bundle
-is, the ``cache:pool:*`` commands are registered.
+is, the ``cache:pool:*`` commands are registered. ``cache:clear`` empties every
+pool too: the bundle registers a kernel cache clearer for them.
 
 Nothing is opened until a pool is first asked for: no directory created, no
 server reached. Boot checks the configuration without opening anything, so a
@@ -20,6 +21,7 @@ container closes; between messages, the kernel's resetter commits it.
 from __future__ import annotations
 
 from collections.abc import AsyncIterator, Awaitable, Callable
+from pathlib import Path
 from typing import Final, final
 
 from typing_extensions import override
@@ -31,6 +33,7 @@ from xtr_cache_contracts import (
 )
 from xtr_dependency_injection import (
     Bundle,
+    CacheClearerInterface,
     ContainerBuilder,
     Reference,
     ServiceConfigurator,
@@ -83,6 +86,26 @@ _TAG_AWARE_INTERFACES: Final[tuple[type, ...]] = (
 
 
 @final
+class _PoolsCacheClearer(CacheClearerInterface):
+    """Empties every pool when the kernel's cache is cleared.
+
+    A pool lives outside the cache directory — under the share directory, or
+    on a server — so removing that directory leaves it as it was. A pool that
+    reports it could not be cleared is left to ``cache:pool:clear``, which names it.
+    """
+
+    __slots__ = ("_pools",)
+
+    def __init__(self, pools: CachePoolClearer) -> None:
+        self._pools = pools
+
+    @override
+    async def clear(self, cache_dir: Path) -> None:
+        del cache_dir
+        _ = await self._pools.clear()
+
+
+@final
 @required_bundle("xtr_logging.bundle:LoggingBundle", ignore_on_invalid=True)
 @required_bundle("xtr_console.bundle:ConsoleBundle", ignore_on_invalid=True)
 @as_bundle("cache", config=CacheConfig)
@@ -112,6 +135,7 @@ class CacheBundle(Bundle[CacheConfig]):
         """Register every pool under its name, the marshaller, the lock registry, the commands."""
         _ = services.set(_default_marshaller)
         _ = services.set(_cache_pool_clearer)
+        _ = services.set(_PoolsCacheClearer)
         if config.stampede_lock is not None:
             _ = services.set(_lock_registry)
 
