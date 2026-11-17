@@ -6,6 +6,7 @@ import asyncio
 import secrets
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Final, Self, final
+from weakref import WeakKeyDictionary
 
 from typing_extensions import override
 from xtr_cache_contracts import Metadata, NamespacedPoolInterface
@@ -41,6 +42,16 @@ before the values that were saved with it.
 
 
 @final
+class _Invalidations:
+    """How many invalidations a pool and its views have started and finished, together."""
+
+    __slots__ = ("count",)
+
+    def __init__(self) -> None:
+        self.count = 0
+
+
+@final
 class TagAwareAdapter(
     DeferredItemsMixin,
     ContractsMixin,
@@ -61,6 +72,11 @@ class TagAwareAdapter(
     of reads asks the tags pool once. Invalidation elsewhere reaches this
     process within that delay. Items saved as deferred take their versions
     when committed, so an invalidation meanwhile does not apply to them.
+
+    Within this process, an invalidation holds once it returned: a version
+    read while it ran is used by that read but never remembered, and a value
+    computed through :meth:`get` while one of its tags was invalidated is
+    returned but not saved.
     """
 
     _items: AdapterInterface
@@ -68,7 +84,8 @@ class TagAwareAdapter(
     _known_ttl: float
     _known: dict[str, tuple[str | None, float]]
     _deferred: dict[str, CacheItem]
-    _minting: asyncio.Lock
+    _minting: WeakKeyDictionary[asyncio.AbstractEventLoop, asyncio.Lock]
+    _invalidations: _Invalidations
 
     def __init__(
         self,
@@ -95,18 +112,28 @@ class TagAwareAdapter(
         self._known_ttl = known_tag_versions_ttl
         self._known = {}
         self._deferred = {}
-        self._minting = asyncio.Lock()
+        self._minting = WeakKeyDictionary()
+        self._invalidations = _Invalidations()
         if clock is not None:
             self._clock = clock
 
     @override
     async def invalidate_tags(self, tags: Iterable[str], /) -> bool:
         ids: list[str] = []
+        names: list[str] = []
         for tag in tags:
             ids.append(InternalKey(TAGS_PREFIX + CacheItem.validate_key(tag)))
-            _ = self._known.pop(tag, None)
+            names.append(tag)
+        if not ids:
+            return True
 
-        return not ids or await self._tags.delete_items(ids)
+        self._invalidated_while_computing(names)
+        self._forget_versions(names)
+        try:
+            return await self._tags.delete_items(ids)
+        finally:
+            # A read that began before the delete landed may have remembered the old version.
+            self._forget_versions(names)
 
     @override
     async def get_item(self, key: str, /) -> CacheItem:
@@ -153,17 +180,19 @@ class TagAwareAdapter(
 
     @override
     async def commit(self) -> bool:
-        deferred, self._deferred = self._deferred, {}
+        deferred, batch = self._take_deferred()
         if not deferred:
             return True
+        try:
+            tags = {tag for item in deferred.values() for tag in item.pending_tags}
+            versions = await self._versions_for_saving(tags)
+            ok = True
+            for item in deferred.values():
+                ok = await self._items.save_deferred(self._inner(item, versions)) and ok
 
-        tags = {tag for item in deferred.values() for tag in item.pending_tags}
-        versions = await self._versions_for_saving(tags)
-        ok = True
-        for item in deferred.values():
-            ok = await self._items.save_deferred(self._inner(item, versions)) and ok
-
-        return await self._items.commit() and ok
+            return await self._items.commit() and ok
+        finally:
+            self._written(batch)
 
     @override
     async def prune(self) -> bool:
@@ -182,7 +211,7 @@ class TagAwareAdapter(
 
     @override
     def with_sub_namespace(self, namespace: str, /) -> Self:
-        _ = self._flights()  # made now, so the view shares it rather than make its own
+        _ = self._shared()  # made now, so the view shares it rather than make its own
         clone = self._unqueued_copy()
         if isinstance(self._items, NamespacedPoolInterface):
             clone._items = self._items.with_sub_namespace(namespace)  # noqa: SLF001 — a copy of this very class.
@@ -235,6 +264,7 @@ class TagAwareAdapter(
     async def _current_versions(self, tags: Iterable[str]) -> dict[str, str | None]:
         """Return each tag's version, as read or remembered; ``None`` for a tag without one."""
         now = self._clock.now().timestamp()
+        invalidations = self._invalidations.count
         versions: dict[str, str | None] = {}
         unknown: list[str] = []
         for tag in tags:
@@ -251,7 +281,9 @@ class TagAwareAdapter(
                 item = items[keys[tag]]
                 version = item.get() if item.is_hit() else None
                 versions[tag] = version if isinstance(version, str) else None
-                self._remember(tag, versions[tag], now)
+                # Remembered only if no invalidation started or ended while it was read.
+                if self._invalidations.count == invalidations:
+                    self._remember(tag, versions[tag], now)
 
         return versions
 
@@ -266,7 +298,7 @@ class TagAwareAdapter(
         if all(found is not None for found in current.values()):
             return {tag: found for tag, found in current.items() if found is not None}
 
-        async with self._minting:
+        async with self._minting_lock():
             # A save holding the lock before this one may have given them one meanwhile.
             current.update(
                 await self._current_versions(
@@ -292,3 +324,17 @@ class TagAwareAdapter(
         """Trust ``version`` for ``tag`` for the next ``known_tag_versions_ttl`` seconds."""
         if self._known_ttl > 0:
             self._known[tag] = (version, now + self._known_ttl)
+
+    def _forget_versions(self, tags: Iterable[str]) -> None:
+        """Forget the remembered versions of ``tags``, and say an invalidation moved them."""
+        self._invalidations.count += 1
+        for tag in tags:
+            _ = self._known.pop(tag, None)
+
+    def _minting_lock(self) -> asyncio.Lock:
+        """Return the running loop's lock giving tags new versions one save at a time."""
+        loop = asyncio.get_running_loop()
+        lock = self._minting.get(loop)
+        if lock is None:
+            lock = self._minting[loop] = asyncio.Lock()
+        return lock

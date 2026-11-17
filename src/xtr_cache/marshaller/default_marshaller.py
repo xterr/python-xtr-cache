@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, cast, final
 
 from typing_extensions import override
 
+from xtr_cache._text import safe_str
 from xtr_cache.exception.marshalling_error import MarshallingError
 
 from .marshaller_interface import MarshallerInterface
@@ -54,7 +55,11 @@ class DefaultMarshaller(MarshallerInterface):
             return cast("object", pickle.loads(value))  # noqa: S301 — only this application writes it
         # Unpickling can raise whatever the stored object's reconstruction raises.
         except Exception as error:
-            raise MarshallingError(f"the stored value cannot be unpickled: {error}") from error
+            # Said safely: an error escaping here as anything but MarshallingError
+            # would fail the whole batch it was read with, not just this value.
+            raise MarshallingError(
+                f"the stored value cannot be unpickled: {safe_str(error)}"
+            ) from error
 
     @override
     def __repr__(self) -> str:

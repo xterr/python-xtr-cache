@@ -6,7 +6,8 @@ import asyncio
 import math
 from abc import ABC, abstractmethod
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Final, TypeVar, cast
+from typing import TYPE_CHECKING, Final, TypeVar, cast, final
+from weakref import WeakKeyDictionary
 
 from typing_extensions import override
 from xtr_cache_contracts import CacheMixin
@@ -14,6 +15,8 @@ from xtr_clock import Clock
 from xtr_logging_contracts import LoggerAware
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from xtr_cache_contracts import Callback, ItemInterface, Metadata
     from xtr_clock import ClockInterface
 
@@ -26,11 +29,47 @@ _T = TypeVar("_T")
 
 _CLOCK_IN_FORCE: Final = Clock()
 
-_COMPUTING: ContextVar[frozenset[tuple[int, str]]] = ContextVar(
+
+@final
+class _Computing:
+    """A computation the running task is inside of, open until its callback returns.
+
+    It holds its flight registry itself, never its id, which a registry built
+    after one was freed may take over. The tags invalidated while it ran are
+    gathered here, so a value computed from what they covered is not saved.
+    """
+
+    __slots__ = ("flights", "invalidated", "open", "scoped")
+
+    def __init__(self, flights: dict[str, asyncio.Future[object]], scoped: str) -> None:
+        self.flights = flights
+        self.scoped = scoped
+        self.open = True
+        self.invalidated: set[str] = set()
+
+
+@final
+class _Shared:
+    """What a pool and its sub-namespace views share: flights by loop, and the open computations.
+
+    Flights are kept per event loop — a future belongs to the loop it was made
+    on — under the loop itself, never its id.
+    """
+
+    __slots__ = ("by_loop", "computing")
+
+    def __init__(self) -> None:
+        self.by_loop: WeakKeyDictionary[
+            asyncio.AbstractEventLoop, dict[str, asyncio.Future[object]]
+        ] = WeakKeyDictionary()
+        self.computing: set[_Computing] = set()
+
+
+_COMPUTING: ContextVar[tuple[_Computing, ...]] = ContextVar(
     "xtr_cache_computing",
-    default=frozenset(),
+    default=(),
 )
-"""The computations the running task is inside of: its flight registry, and the scoped key."""
+"""The computations the running task is inside of; a task outliving one carries it closed."""
 
 _FAILED: Final = object()
 """What a shared computation resolves to when its owner failed or was cancelled."""
@@ -52,14 +91,20 @@ class ContractsMixin(CacheMixin, LoggerAware, ABC):
       process sharing its locks share one computation too.
     - A callback reading its own key — directly or through what it calls —
       computes without saving, instead of waiting on itself.
+    - A forced recomputation (``beta`` infinite) runs its own callback, never
+      joining one already in progress.
+    - A value whose tags were invalidated while it was computed is returned
+      but not saved: it was computed from what the invalidation retired.
+      This sees the invalidations of this process only.
 
     Computations are keyed by :meth:`_scope` and the key, so pools on one
-    backend under different namespaces never wait on each other.
+    backend under different namespaces never wait on each other, and by the
+    running event loop, so two loops never wait on each other's futures.
     """
 
     _lock_registry: LockRegistry | None = None
     _clock: ClockInterface = _CLOCK_IN_FORCE
-    _in_flight: dict[str, asyncio.Future[object]]
+    _in_flight: _Shared
 
     @abstractmethod
     @override
@@ -98,12 +143,15 @@ class ContractsMixin(CacheMixin, LoggerAware, ABC):
         item = cast("CacheItem", item)
         flights = self._flights()
         scoped = self._scope() + item.key
-        if (id(flights), scoped) in _COMPUTING.get():
+        if any(
+            computing.open and computing.flights is flights and computing.scoped == scoped
+            for computing in _COMPUTING.get()
+        ):
             value = await callback(item)
             _ = item.set(value)
             return value
 
-        shared = flights.get(scoped)
+        shared = None if math.isinf(beta) else flights.get(scoped)
         if shared is not None:
             result = await asyncio.shield(shared)
             if result is not _FAILED:
@@ -154,28 +202,51 @@ class ContractsMixin(CacheMixin, LoggerAware, ABC):
         scoped: str,
     ) -> _T:
         """Run ``callback``, record how long it took, save the value, and report it."""
-        token = _COMPUTING.set(_COMPUTING.get() | {(id(self._flights()), scoped)})
+        open_computations = self._shared().computing
+        computing = _Computing(self._flights(), scoped)
+        open_computations.add(computing)
+        token = _COMPUTING.set((*_COMPUTING.get(), computing))
         started = self._now()
         try:
             value = await callback(item)
         finally:
+            computing.open = False
+            open_computations.discard(computing)
             _COMPUTING.reset(token)
 
         ctime = math.ceil(1000 * (self._now() - started))
         _ = item.set(value).record_computation(ctime)
         if metadata is not None:
             _report(metadata, item, ctime)
-        if not await self.save(item) and metadata is not None:
+        if not computing.invalidated.isdisjoint(item.pending_tags):
+            if metadata is not None:
+                metadata["save_failed"] = True
+        elif not await self.save(item) and metadata is not None:
             metadata["save_failed"] = True
 
         return value
 
+    def _invalidated_while_computing(self, tags: Iterable[str]) -> None:
+        """Tell every computation in progress that ``tags`` were invalidated meanwhile."""
+        invalidated = set(tags)
+        for computing in self._shared().computing:
+            computing.invalidated.update(invalidated)
+
     def _flights(self) -> dict[str, asyncio.Future[object]]:
-        """Return the computations in progress, by scoped key; views of this pool share them."""
+        """Return the running loop's computations in progress, by scoped key."""
+        by_loop = self._shared().by_loop
+        loop = asyncio.get_running_loop()
+        flights = by_loop.get(loop)
+        if flights is None:
+            flights = by_loop[loop] = {}
+        return flights
+
+    def _shared(self) -> _Shared:
+        """Return what this pool shares with its views; made on first use, or before a view."""
         try:
             return self._in_flight
         except AttributeError:
-            self._in_flight = {}
+            self._in_flight = _Shared()
             return self._in_flight
 
 

@@ -216,3 +216,22 @@ def test_it_describes_itself() -> None:
 
 async def _unreachable_compute() -> str:
     raise AssertionError
+
+
+async def test_a_nested_get_on_a_held_slot_does_not_wait() -> None:
+    registry, _logger = _registry(InMemoryStore(), slots=1)
+    pool = ArrayAdapter()
+    pool.set_lock_registry(registry)
+
+    async def inner(item: ItemInterface) -> str:
+        del item
+        return "inner"
+
+    async def outer(item: ItemInterface) -> str:
+        del item
+        return "outer+" + await pool.get("other", inner)
+
+    async with asyncio.timeout(2):
+        value = await pool.get("k", outer)
+
+    assert value == "outer+inner"

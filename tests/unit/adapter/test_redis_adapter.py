@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+import pickle
 import sys
 
 import pytest
 from redis.asyncio import Redis
+from typing_extensions import override
 
 from tests.support.fake_redis import FakeRedis
 from tests.support.pool_conformance import PoolTests
@@ -166,3 +168,34 @@ async def test_a_client_opened_from_a_dsn_is_the_adapters_to_close() -> None:
 
     assert adapter.owns_connection
     await adapter.close()
+
+
+class _UnprintableError(Exception):
+    @override
+    def __str__(self) -> str:
+        raise ValueError("cannot say")
+
+
+def _refuse_to_rebuild() -> object:
+    raise _UnprintableError
+
+
+class _RebuildsBadly:
+    @override
+    def __reduce__(self) -> tuple[object, tuple[()]]:
+        return (_refuse_to_rebuild, ())
+
+
+async def test_a_value_that_fails_to_rebuild_does_not_cost_the_rest_of_a_batch() -> None:
+    redis = FakeRedis()
+    pool = RedisAdapter(redis.as_client(), "ns")
+    logger = RecordingLogger()
+    pool.set_logger(logger)
+    _ = await pool.save((await pool.get_item("good")).set("kept"))
+    redis.data["ns:bad"] = (pickle.dumps(_RebuildsBadly()), None)
+
+    items = await pool.get_items(["good", "bad"])
+
+    assert items["good"].get() == "kept"
+    assert not items["bad"].is_hit()
+    assert logger.messages("warning") == ['Failed to read key "{key}": {reason}']

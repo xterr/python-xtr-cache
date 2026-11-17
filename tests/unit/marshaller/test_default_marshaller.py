@@ -4,6 +4,7 @@ import threading
 from dataclasses import dataclass
 
 import pytest
+from typing_extensions import override
 
 from xtr_cache import DefaultMarshaller, MarshallerInterface, MarshallingError
 
@@ -39,3 +40,28 @@ def test_bytes_that_are_not_a_pickle_are_refused() -> None:
 def test_it_is_a_marshaller() -> None:
     assert isinstance(DefaultMarshaller(), MarshallerInterface)
     assert repr(DefaultMarshaller()) == "DefaultMarshaller()"
+
+
+class _UnprintableError(Exception):
+    @override
+    def __str__(self) -> str:
+        raise ValueError("cannot say")
+
+
+def _refuse_to_rebuild() -> object:
+    raise _UnprintableError
+
+
+class _RebuildsBadly:
+    """Pickles fine; unpickling runs code that fails with an error that cannot say what it is."""
+
+    @override
+    def __reduce__(self) -> tuple[object, tuple[()]]:
+        return (_refuse_to_rebuild, ())
+
+
+def test_an_unprintable_unpickling_error_is_named_by_its_class() -> None:
+    encoded, _ = DefaultMarshaller().marshall({"bad": _RebuildsBadly()})
+
+    with pytest.raises(MarshallingError, match=r"\[unprintable .*_UnprintableError\]"):
+        _ = DefaultMarshaller().unmarshall(encoded["bad"])

@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 import copy
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING, Self, final
 
 from typing_extensions import override
 from xtr_cache_contracts import CacheItemPoolInterface
@@ -19,6 +20,17 @@ if TYPE_CHECKING:
 __all__ = ["DeferredItemsMixin"]
 
 
+@final
+class _Batch:
+    """Deferred items a commit took from the queue, until it wrote them."""
+
+    __slots__ = ("keys", "written")
+
+    def __init__(self, keys: Iterable[str]) -> None:
+        self.keys = frozenset(keys)
+        self.written = asyncio.Event()
+
+
 class DeferredItemsMixin(CacheItemPoolInterface, ABC):
     """Queues saved items until :meth:`commit`, which the pool implements.
 
@@ -26,10 +38,12 @@ class DeferredItemsMixin(CacheItemPoolInterface, ABC):
     place only. What was queued before is committed first, apart, so the
     answer is about the saved item alone and not another one's failure. What
     is queued is the pool's to drop when the keys are deleted or cleared, and
-    to commit before a queued key is read.
+    to commit before a queued key is read. A key a commit is writing is read
+    once that commit is done, so a read never misses what was saved.
     """
 
     _deferred: dict[str, CacheItem]
+    _batches: list[_Batch]
 
     @abstractmethod
     @override
@@ -61,9 +75,35 @@ class DeferredItemsMixin(CacheItemPoolInterface, ABC):
             _ = await self.commit()
 
     async def _commit_if_queued(self, keys: Iterable[str]) -> None:
-        """Commit first when any of ``keys`` is queued, so a read never misses what was saved."""
-        if any(key in self._deferred for key in keys):
+        """Commit first when any of ``keys`` is queued, or wait for the commit writing them."""
+        wanted = list(keys)
+        if any(key in self._deferred for key in wanted):
             _ = await self.commit()
+        for batch in list(self._in_commit()):
+            if not batch.keys.isdisjoint(wanted):
+                _ = await batch.written.wait()
+
+    def _take_deferred(self) -> tuple[dict[str, CacheItem], _Batch]:
+        """Take every queued item for a commit, readable through it until :meth:`_written`."""
+        deferred, self._deferred = self._deferred, {}
+        batch = _Batch(deferred)
+        if deferred:
+            self._in_commit().append(batch)
+        return deferred, batch
+
+    def _written(self, batch: _Batch) -> None:
+        """Say the commit that took ``batch`` is done, written or not."""
+        batch.written.set()
+        batches = self._in_commit()
+        if batch in batches:
+            batches.remove(batch)
+
+    def _in_commit(self) -> list[_Batch]:
+        try:
+            return self._batches
+        except AttributeError:
+            self._batches = []
+            return self._batches
 
     def _forget_deferred(self, keys: Iterable[str]) -> None:
         """Drop the queued items of ``keys``, which are being deleted."""
@@ -80,4 +120,5 @@ class DeferredItemsMixin(CacheItemPoolInterface, ABC):
         """Return a shallow copy of this pool with nothing queued, for a sub-namespace view."""
         clone = copy.copy(self)
         clone._deferred = {}  # noqa: SLF001 — a copy of this very class.
+        clone._batches = []  # noqa: SLF001 — a copy of this very class.
         return clone

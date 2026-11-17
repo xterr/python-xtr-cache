@@ -130,6 +130,8 @@ other keys.
 A dictionary. Values are stored serialized by default, so what a caller gets back is a copy it can
 change freely; `store_serialized=False` stores the objects themselves. `max_items` drops the least
 recently used beyond a count, `max_lifetime` caps every value's lifetime.
+Unbounded by default (`max_items=0`): it often holds live rate-limit counts and sessions, which
+silent eviction would reset, so set `max_items` where keys come from callers.
 
 ### `FilesystemAdapter`
 
@@ -194,6 +196,10 @@ deletes its version. Nothing is listed or scanned, so invalidating costs the sam
 items carry the tag. Versions read are trusted for `known_tag_versions_ttl` seconds (0.15 by
 default), which is how soon an invalidation elsewhere reaches this process. Items saved as
 deferred take their versions when committed, so an invalidation meanwhile does not apply to them.
+Within a process an invalidation holds once `invalidate_tags()` returned: a version read while it
+ran is used by that read but not trusted after, and a value `get()` computed while one of its tags
+was invalidated is returned but not saved (`save_failed` in the metadata). Another process's
+invalidation is seen through the version alone.
 A tag's first version is given one save at a time in a process; two processes giving one at the
 same moment may each keep their own, and the items of the one that lost miss once and are
 computed again.
@@ -208,6 +214,8 @@ Tagging an item of any other pool raises `LogicError`.
   computation — and its result: they all get the very object computed, so copy it before changing
   it; what is cached is not affected. If it fails or is cancelled, the others compute for
   themselves, side by side.
+  Do not compute ORM entities bound to the caller's session: the session closes with the first
+  caller's unit, and every other caller gets entities it cannot load. Cache plain values.
 - **One computation per key across processes**, with a `LockRegistry`. Keys are spread over
   `slots` locks (20 by default); the caller that takes a key's slot computes and saves, the others
   wait for it and read what was saved — or compute themselves after `wait` seconds (30), so a stuck
@@ -226,10 +234,15 @@ Tagging an item of any other pool raises `LogicError`.
   its own lifetime, or the pool's default. On a hit, the value may be recomputed before it
   expires, with a chance that grows as expiry nears and faster for values that are slow to compute. Under load one caller refreshes it while the others
   keep reading the old one, instead of all missing at once. `beta` tunes it: `0` disables it,
-  `math.inf` forces a recomputation now.
+  `math.inf` forces a recomputation now — with the caller's own callback, never joining one
+  already running.
 
 A callback reading its own key — directly or through what it calls — computes without saving
-rather than waiting on itself. Time comes from the clock in force (`xtr_clock`), so
+rather than waiting on itself, and one reading another key of the slot it holds computes that key
+without locking. Two callbacks each reading the other's key wait on each other: that is a cyclic
+dependency between them, not something the pool breaks. Computations are shared per event loop,
+so loops in other threads never wait on each other's. A key a commit is writing is read once that
+commit is done. Time comes from the clock in force (`xtr_clock`), so
 `mock_time()` freezes lifetimes and recomputation alike.
 
 ## Marshallers
@@ -403,6 +416,11 @@ backend failing is never one of them: it is logged, and the call misses or retur
 | `InvalidArgumentError` | A key, tag, namespace, `beta`, DSN or option is invalid (also a `ValueError`) |
 | `LogicError` | An item of a pool without tags is tagged |
 | `MarshallingError` | A marshaller cannot decode stored bytes — caught by pools, which read a miss |
+
+## Upgrading
+
+What changes for an application moving to 7.0, and how to keep the old behaviour where that is
+still possible: [Upgrading to 7.0](../../UPGRADING.md#xtr-cache).
 
 ## Development
 

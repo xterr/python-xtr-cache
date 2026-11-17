@@ -126,14 +126,16 @@ _ = await cache.invalidate_tags([f"customer.{customer_id}"])
 Invalidating costs the same however many items carry the tag: each tag has a version, and an item
 is a hit only while every version it was saved with is unchanged. Versions read are trusted for
 `known_tag_versions_ttl` seconds (0.15 by default), which is how soon an invalidation elsewhere
-reaches this process. Calling `item.tag(...)` on a pool that is not tag-aware raises `LogicError`.
+reaches this process; within the process an invalidation holds once it returned, and a value
+computed while one of its tags was invalidated is returned but not saved. Calling `item.tag(...)`
+on a pool that is not tag-aware raises `LogicError`.
 
 ## Stampede protection and marshallers
 
 `get()` already computes a missed key once per process, however many callers wait on it. Two knobs
 on top: `cache.set_lock_registry(LockRegistry(...))` extends that to every process sharing the
 lock store, and `beta` on each `get()` tunes refreshing a value shortly before it expires (`0`
-off, `math.inf` now, `None` the pool's own `1.0`).
+off, `math.inf` now — running the caller's own callback — `None` the pool's own `1.0`).
 
 Adapters that store bytes encode values with a `MarshallerInterface`, pickle by default. On a
 backend anything else can write to, use `SodiumMarshaller` instead: it encrypts, authenticates, and

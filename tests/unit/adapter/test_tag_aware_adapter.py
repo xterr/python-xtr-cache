@@ -238,3 +238,71 @@ async def test_items_saved_concurrently_under_one_tag_all_go_when_it_is_invalida
     assert await pool.invalidate_tags(["shared"])
 
     assert not any(item.is_hit() for item in (await pool.get_items(keys)).values())
+
+
+def _remembering_pool() -> tuple[TagAwareAdapter, ScriptedAdapter]:
+    """Return a pool trusting a read version for a minute, and its tags pool."""
+    tags = ScriptedAdapter()
+    return TagAwareAdapter(ArrayAdapter(), tags, known_tag_versions_ttl=60), tags
+
+
+async def test_a_read_overlapping_an_invalidation_misses_afterwards() -> None:
+    with mock_time("2024-04-09 12:00:00") as clock:
+        pool, tags = _remembering_pool()
+        await _save_tagged(pool, "k", "t")
+        clock.sleep(61)
+        gate = asyncio.Event()
+        tags.pause_after["fetch"] = gate
+        reading = asyncio.create_task(pool.get_item("k"))
+        for _ in range(3):
+            await asyncio.sleep(0)
+
+        assert await pool.invalidate_tags(["t"])
+        gate.set()
+        _ = await reading
+
+        assert not (await pool.get_item("k")).is_hit()
+
+
+async def test_a_version_read_overlapping_an_invalidation_is_not_remembered() -> None:
+    with mock_time("2024-04-09 12:00:00") as clock:
+        pool, tags = _remembering_pool()
+        await _save_tagged(pool, "k", "t")
+        clock.sleep(61)
+        gate = asyncio.Event()
+        tags.pause_before["delete"] = gate
+        invalidating = asyncio.create_task(pool.invalidate_tags(["t"]))
+        for _ in range(3):
+            await asyncio.sleep(0)
+
+        _ = await pool.get_item("k")
+        gate.set()
+        assert await invalidating
+
+        assert not (await pool.get_item("k")).is_hit()
+
+
+async def test_a_value_computed_before_an_invalidation_is_not_saved_as_fresh() -> None:
+    pool = TagAwareAdapter(ArrayAdapter(), known_tag_versions_ttl=0)
+    compute = Computation("old", tags=("t",), held=True)
+    computing = asyncio.create_task(pool.get("k", compute))
+    _ = await compute.started.wait()
+
+    assert await pool.invalidate_tags(["t"])
+    compute.release()
+
+    assert await computing == "old"
+    assert not (await pool.get_item("k")).is_hit()
+
+
+async def test_an_untouched_tags_item_still_hits_after_another_tags_invalidation() -> None:
+    pool = TagAwareAdapter(ArrayAdapter(), known_tag_versions_ttl=0)
+    compute = Computation("kept", tags=("t",), held=True)
+    computing = asyncio.create_task(pool.get("k", compute))
+    _ = await compute.started.wait()
+
+    assert await pool.invalidate_tags(["other"])
+    compute.release()
+
+    assert await computing == "kept"
+    assert (await pool.get_item("k")).is_hit()

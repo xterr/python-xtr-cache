@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import math
+import threading
 from typing import TYPE_CHECKING
 
 import pytest
@@ -106,6 +107,29 @@ async def test_a_callback_reading_its_own_key_computes_without_waiting_on_itself
 
     assert await pool.get("k", outer) == "outer(inner)"
     assert (await pool.get_item("k")).get() == "outer(inner)"
+
+
+async def test_a_task_outliving_the_computation_does_not_see_it() -> None:
+    pool = ArrayAdapter()
+    gate = asyncio.Event()
+    outliving: list[asyncio.Task[str]] = []
+
+    async def later_on() -> str:
+        _ = await gate.wait()
+        return await pool.get("k", Computation("later"))
+
+    async def outer(item: ItemInterface) -> str:
+        del item
+        outliving.append(asyncio.create_task(later_on()))
+        return "first"
+
+    _ = await pool.get("k", outer)
+    _ = await pool.delete_item("k")
+    gate.set()
+
+    # A miss of its own, computed and saved: not a callback reading its own key.
+    assert await outliving[0] == "later"
+    assert (await pool.get_item("k")).get() == "later"
 
 
 async def test_an_infinite_beta_recomputes_a_hit() -> None:
@@ -256,3 +280,49 @@ async def test_a_pool_given_a_clock_counts_lifetimes_on_it(wrap: str) -> None:
     clock.sleep(11)
 
     assert not (await pool.get_item("k")).is_hit()
+
+
+async def test_a_forced_recompute_runs_its_own_callback() -> None:
+    pool = ArrayAdapter()
+    first = Computation("first", held=True)
+    computing = asyncio.create_task(pool.get("k", first))
+    _ = await first.started.wait()
+    forced = Computation("forced")
+
+    async with asyncio.timeout(5):
+        value = await pool.get("k", forced, beta=math.inf)
+
+    assert value == "forced"
+    assert forced.calls == 1
+    first.release()
+    assert await computing == "first"
+
+
+def test_flights_of_two_loops_do_not_mix() -> None:
+    pool = ArrayAdapter()
+    started = threading.Event()
+    release = threading.Event()
+
+    async def held(item: ItemInterface) -> str:
+        del item
+        started.set()
+        _ = await asyncio.to_thread(release.wait, 5)
+        return "other loop"
+
+    async def mine(item: ItemInterface) -> str:
+        del item
+        return "this loop"
+
+    other = threading.Thread(target=lambda: asyncio.run(pool.get("k", held)))
+    other.start()
+    try:
+        assert started.wait(5)
+
+        async def read() -> str:
+            async with asyncio.timeout(5):
+                return await pool.get("k", mine)
+
+        assert asyncio.run(read()) == "this loop"
+    finally:
+        release.set()
+        other.join(5)

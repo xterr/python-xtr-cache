@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import zlib
+from contextvars import ContextVar
 from typing import TYPE_CHECKING, Final, TypeVar, cast, final
 
 from typing_extensions import override
@@ -31,6 +32,26 @@ DEFAULT_WAIT: Final = 30.0
 
 
 @final
+class _Held:
+    """A slot the running task chain holds, open until its computation returns.
+
+    It holds its registry itself, never its id; a task outliving the hold
+    carries the record closed.
+    """
+
+    __slots__ = ("open", "registry", "slot")
+
+    def __init__(self, registry: LockRegistry, slot: int) -> None:
+        self.registry = registry
+        self.slot = slot
+        self.open = True
+
+
+_HELD: ContextVar[tuple[_Held, ...]] = ContextVar("xtr_cache_held_slots", default=())
+"""The slots the running task chain holds."""
+
+
+@final
 class LockRegistry(LoggerAware):
     """Protects a backend from a stampede: one computation per key, a bounded number at once.
 
@@ -47,6 +68,10 @@ class LockRegistry(LoggerAware):
     are computed without locking meanwhile rather than wait on it in turn,
     and it is tried again after. A key keeps its slot whatever is set aside,
     so every process agrees on which lock guards it.
+
+    A computation reading another key of the slot it holds — keys share
+    slots — computes that key at once, without locking: it would otherwise
+    wait on itself.
     """
 
     __slots__ = ("_clock", "_evicted", "_locks", "_prefix", "_slots", "_wait")
@@ -112,7 +137,7 @@ class LockRegistry(LoggerAware):
             The value computed here, or the one read after waiting.
         """
         slot = self._slot(key)
-        if slot is None:
+        if slot is None or self._holds(slot):
             return await compute()
         resource = f"{self._prefix}{slot}"
         context: dict[str, object] = {"key": key, "slot": resource}
@@ -121,9 +146,13 @@ class LockRegistry(LoggerAware):
             lock = self._locks.create_lock(resource)
             if await lock.acquire():
                 self.logger.info('Lock acquired, now computing item "{key}"', context)
+                held = _Held(self, slot)
+                token = _HELD.set((*_HELD.get(), held))
                 try:
                     return await compute()
                 finally:
+                    held.open = False
+                    _HELD.reset(token)
                     await lock.release()
 
             self.logger.info('Item "{key}" is locked, waiting for it to be released', context)
@@ -157,6 +186,12 @@ class LockRegistry(LoggerAware):
             return None
         del self._evicted[slot]
         return slot
+
+    def _holds(self, slot: int) -> bool:
+        """Tell whether the running task chain holds ``slot`` of this registry."""
+        return any(
+            held.open and held.registry is self and held.slot == slot for held in _HELD.get()
+        )
 
     def _evict(self, slot: int) -> None:
         """Set ``slot`` aside for a while, its holder stuck, so later callers do not wait on it."""

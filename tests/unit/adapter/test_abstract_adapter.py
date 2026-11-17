@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import pytest
+from typing_extensions import override
 from xtr_clock.testing import mock_time
 
 from tests.support.recording_logger import RecordingLogger
@@ -217,3 +218,21 @@ async def test_a_failed_commit_drops_what_it_could_not_store() -> None:
     assert await pool.commit()
 
     assert "a" not in pool.stored
+
+
+class _UnprintableError(Exception):
+    @override
+    def __str__(self) -> str:
+        raise ValueError("cannot say")
+
+
+async def test_a_backend_failure_names_an_unprintable_error_by_its_class() -> None:
+    pool = ScriptedAdapter("ns")
+    pool.fail.add("fetch")
+    pool.error = _UnprintableError()
+    logger = _logged(pool)
+
+    assert not (await pool.get_item("a")).is_hit()
+
+    _, _, context = logger.records[0]
+    assert "_UnprintableError" in str(context["reason"])

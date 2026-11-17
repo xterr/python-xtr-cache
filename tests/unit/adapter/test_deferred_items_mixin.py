@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import asyncio
+
 import pytest
 
 from tests.support.scripted_adapter import ScriptedAdapter
@@ -86,3 +88,22 @@ async def test_a_save_replaces_a_queued_item_of_the_same_key_without_writing_it(
 
     assert [operation for operation, _ in pool.calls] == ["save"]
     assert pool.stored["a"][0] == 2
+
+
+async def test_a_deferred_item_is_readable_while_its_commit_is_in_flight() -> None:
+    pool = ScriptedAdapter()
+    gate = asyncio.Event()
+    _ = await pool.save_deferred(CacheItem("a", 1))
+    pool.pause_before["save"] = gate
+    committing = asyncio.create_task(pool.commit())
+    await asyncio.sleep(0)
+
+    reading = asyncio.create_task(pool.get_item("a"))
+    for _ in range(3):
+        await asyncio.sleep(0)
+    gate.set()
+
+    assert await committing
+    item = await reading
+    assert item.is_hit()
+    assert item.get() == 1
