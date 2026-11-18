@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import TYPE_CHECKING, Generic, TypeVar, final
+from typing import TYPE_CHECKING, final
 
 if TYPE_CHECKING:
     from xtr_clock import MockClock
@@ -12,11 +12,9 @@ if TYPE_CHECKING:
 
 __all__ = ["Computation"]
 
-_T = TypeVar("_T")
-
 
 @final
-class Computation(Generic[_T]):
+class Computation[T]:
     """Computes ``value``, recording each item it was called with.
 
     ``lifetime`` is set on the item, ``tags`` added to it; ``took`` seconds pass
@@ -26,7 +24,7 @@ class Computation(Generic[_T]):
 
     def __init__(  # noqa: PLR0913 — every option past the value is keyword-only.
         self,
-        value: _T,
+        value: T,
         *,
         lifetime: float | None = None,
         tags: tuple[str, ...] = (),
@@ -56,7 +54,7 @@ class Computation(Generic[_T]):
         """Let a held computation return."""
         self._released.set()
 
-    async def __call__(self, item: ItemInterface) -> _T:
+    async def __call__(self, item: ItemInterface) -> T:
         self.items.append(item)
         self.started.set()
         if self._lifetime is not None:

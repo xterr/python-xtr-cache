@@ -5,10 +5,9 @@ from __future__ import annotations
 import asyncio
 import secrets
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Final, Self, final
+from typing import TYPE_CHECKING, Final, Self, final, override
 from weakref import WeakKeyDictionary
 
-from typing_extensions import override
 from xtr_cache_contracts import Metadata, NamespacedPoolInterface
 
 from xtr_cache._internal_key import InternalKey

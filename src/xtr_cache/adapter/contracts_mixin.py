@@ -6,10 +6,9 @@ import asyncio
 import math
 from abc import ABC, abstractmethod
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Final, TypeVar, cast, final
+from typing import TYPE_CHECKING, Final, cast, final, override
 from weakref import WeakKeyDictionary
 
-from typing_extensions import override
 from xtr_cache_contracts import CacheMixin
 from xtr_clock import Clock
 from xtr_logging_contracts import LoggerAware
@@ -25,7 +24,6 @@ if TYPE_CHECKING:
 
 __all__ = ["ContractsMixin"]
 
-_T = TypeVar("_T")
 
 _CLOCK_IN_FORCE: Final = Clock()
 
@@ -131,13 +129,13 @@ class ContractsMixin(CacheMixin, LoggerAware, ABC):
         )
 
     @override
-    async def _compute(
+    async def _compute[T](
         self,
         item: ItemInterface,
-        callback: Callback[_T],
+        callback: Callback[T],
         beta: float,
         metadata: Metadata | None,
-    ) -> _T:
+    ) -> T:
         """Compute the value once for every concurrent caller, under the lock registry if any."""
         # The template hands back what get_item returned, which here is always a CacheItem.
         item = cast("CacheItem", item)
@@ -156,7 +154,7 @@ class ContractsMixin(CacheMixin, LoggerAware, ABC):
             result = await asyncio.shield(shared)
             if result is not _FAILED:
                 # Computed by the same kind of callback for the same key: the caller's promise.
-                return cast("_T", result)
+                return cast("T", result)
             # Queueing behind another attempt would make every caller wait for every failure.
             return await self._compute_and_save(item, callback, metadata, scoped)
 
@@ -174,19 +172,19 @@ class ContractsMixin(CacheMixin, LoggerAware, ABC):
             if flights.get(scoped) is future:
                 del flights[scoped]
 
-    async def _compute_locked(
+    async def _compute_locked[T](
         self,
         item: CacheItem,
-        callback: Callback[_T],
+        callback: Callback[T],
         beta: float,
         metadata: Metadata | None,
         scoped: str,
-    ) -> _T:
+    ) -> T:
         """Compute under the lock registry's slot for ``scoped``, when there is a registry."""
         if self._lock_registry is None:
             return await self._compute_and_save(item, callback, metadata, scoped)
 
-        async def compute() -> _T:
+        async def compute() -> T:
             return await self._compute_and_save(item, callback, metadata, scoped)
 
         async def read() -> ItemInterface:
@@ -194,13 +192,13 @@ class ContractsMixin(CacheMixin, LoggerAware, ABC):
 
         return await self._lock_registry.compute(scoped, compute, read, force=math.isinf(beta))
 
-    async def _compute_and_save(
+    async def _compute_and_save[T](
         self,
         item: CacheItem,
-        callback: Callback[_T],
+        callback: Callback[T],
         metadata: Metadata | None,
         scoped: str,
-    ) -> _T:
+    ) -> T:
         """Run ``callback``, record how long it took, save the value, and report it."""
         open_computations = self._shared().computing
         computing = _Computing(self._flights(), scoped)

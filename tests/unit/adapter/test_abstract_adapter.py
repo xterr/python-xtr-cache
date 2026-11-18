@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from typing import override
+
 import pytest
-from typing_extensions import override
 from xtr_clock.testing import mock_time
 
 from tests.support.recording_logger import RecordingLogger

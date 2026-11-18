@@ -3,7 +3,7 @@ name = "xtr-cache"
 version = "7.0.0"
 description = "Cache pools in memory, in files, in Redis, chained or tag-aware, with stampede protection."
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.14.4"
 license = "MIT"
 license-files = ["LICENSE"]
 authors = [
@@ -14,14 +14,10 @@ classifiers = [
     "Development Status :: 3 - Alpha",
     "Framework :: AsyncIO",
     "Intended Audience :: Developers",
-    "Programming Language :: Python :: 3.11",
-    "Programming Language :: Python :: 3.12",
-    "Programming Language :: Python :: 3.13",
     "Programming Language :: Python :: 3.14",
     "Typing :: Typed",
 ]
 dependencies = [
-    "typing-extensions>=4.4",
     "xtr-cache-contracts>=7.0,<8",
     "xtr-clock>=7.0,<8",
     "xtr-lock>=7.0,<8",
@@ -30,10 +26,10 @@ dependencies = [
 
 [project.optional-dependencies]
 redis = [
-    "redis>=5.0",
+    "redis>=7.1",
 ]
 sodium = [
-    "pynacl>=1.5",
+    "pynacl>=1.6",
 ]
 
 # Advertises the bundle so debug:bundles can name it when installed but not listed.
@@ -47,14 +43,14 @@ cache = "xtr_cache.recipe"
 
 [dependency-groups]
 dev = [
-    "basedpyright>=1.21",
-    "ruff>=0.8",
-    "pytest>=8",
-    "pytest-cov>=5",
-    "anyio>=4.0",
+    "basedpyright>=1.31.7",
+    "ruff>=0.14.7",
+    "pytest>=8.4",
+    "pytest-cov>=7.1",
+    "anyio>=4.10",
     "ty>=0.0.83",
-    "pynacl>=1.5",
-    "redis>=5.0",
+    "pynacl>=1.6",
+    "redis>=7.1",
     "xtr-console>=7.0,<8",
     "xtr-dependency-injection>=7.0,<8",
     "xtr-logging>=7.0,<8",
@@ -70,7 +66,7 @@ build-backend = "uv_build"
 # ─────────────────────────────────────────────────────────────────
 [tool.basedpyright]
 typeCheckingMode = "all"
-pythonVersion = "3.11"
+pythonVersion = "3.14"
 pythonPlatform = "All"
 include = ["src", "tests"]
 exclude = ["**/__pycache__", "**/.venv", "**/build", "**/dist", ".tmp"]
@@ -96,7 +92,7 @@ reportPrivateUsage = "none"
 # ruff — select = ["ALL"], minimal justified ignores
 # ─────────────────────────────────────────────────────────────────
 [tool.ruff]
-target-version = "py311"
+target-version = "py314"
 line-length = 100
 src = ["src", "tests"]
 

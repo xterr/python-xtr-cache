@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Final, TypeAlias
+from typing import Final
 
 from xtr_dependency_injection import one_or_many
 
@@ -17,7 +17,7 @@ __all__ = ["APP_POOL", "CacheConfig", "PoolEntry"]
 APP_POOL: Final = "app"
 """The application's own pool, provided without a qualifier too."""
 
-PoolEntry: TypeAlias = AdapterEntry | Sequence[AdapterEntry] | PoolConfig
+type PoolEntry = AdapterEntry | Sequence[AdapterEntry] | PoolConfig
 """A pool: its adapter, several to chain, or a :class:`PoolConfig`."""
 
 

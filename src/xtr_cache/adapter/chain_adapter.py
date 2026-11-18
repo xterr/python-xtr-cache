@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import copy
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Self, final
+from typing import TYPE_CHECKING, Self, final, override
 
-from typing_extensions import override
 from xtr_cache_contracts import InvalidArgumentError, NamespacedPoolInterface
 
 from xtr_cache.cache_item import CacheItem

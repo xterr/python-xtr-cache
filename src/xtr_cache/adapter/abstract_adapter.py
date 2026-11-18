@@ -6,9 +6,8 @@ import contextlib
 import math
 import re
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, ClassVar, Final, Self
+from typing import TYPE_CHECKING, ClassVar, Final, Self, override
 
-from typing_extensions import override
 from xtr_cache_contracts import InvalidArgumentError, NamespacedPoolInterface
 
 from xtr_cache._text import safe_str

@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import dataclasses
-from typing import TYPE_CHECKING, Final, cast, final
-
-from typing_extensions import override
+from typing import TYPE_CHECKING, Final, cast, final, override
 
 from xtr_cache.exception import InvalidArgumentError, MarshallingError
 from xtr_cache.marshaller.default_marshaller import DefaultMarshaller

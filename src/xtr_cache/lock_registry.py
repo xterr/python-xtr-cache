@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 import zlib
 from contextvars import ContextVar
-from typing import TYPE_CHECKING, Final, TypeVar, cast, final
+from typing import TYPE_CHECKING, Final, cast, final, override
 
-from typing_extensions import override
 from xtr_clock import MonotonicClock
 from xtr_logging_contracts import LoggerAware
 
@@ -22,7 +21,6 @@ if TYPE_CHECKING:
 
 __all__ = ["LockRegistry"]
 
-_T = TypeVar("_T")
 
 DEFAULT_SLOTS: Final = 20
 """How many values may be computed at once, across every process sharing the locks."""
@@ -117,14 +115,14 @@ class LockRegistry(LoggerAware):
         self._prefix = prefix
         self._clock = clock if clock is not None else MonotonicClock()
 
-    async def compute(
+    async def compute[T](
         self,
         key: str,
-        compute: Callable[[], Awaitable[_T]],
+        compute: Callable[[], Awaitable[T]],
         read: Callable[[], Awaitable[ItemInterface]],
         *,
         force: bool = False,
-    ) -> _T:
+    ) -> T:
         """Return the value for ``key``, computed here or by whoever held its slot.
 
         Args:
@@ -172,7 +170,7 @@ class LockRegistry(LoggerAware):
             if item.is_hit():
                 self.logger.info('Item "{key}" retrieved after lock was released', context)
                 # The key's value was saved by the same kind of callback: the caller's promise.
-                return cast("_T", item.get())
+                return cast("T", item.get())
 
             self.logger.info('Item "{key}" not found while lock was released, retrying', context)
 

@@ -3,9 +3,8 @@
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import TYPE_CHECKING, Final, Self, final
+from typing import TYPE_CHECKING, Final, Self, final, override
 
-from typing_extensions import override
 from xtr_cache_contracts import RESERVED_CHARACTERS, InvalidArgumentError, ItemInterface, Metadata
 from xtr_clock import Clock
 

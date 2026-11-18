@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import math
 import re
-from typing import TYPE_CHECKING, ClassVar, Final, Protocol, cast, final
+from typing import TYPE_CHECKING, ClassVar, Final, Protocol, cast, final, override
 
-from typing_extensions import override
 from xtr_lock import InvalidArgumentError as LockArgumentError
 from xtr_lock.store import create_redis_client
 

@@ -5,9 +5,7 @@ from __future__ import annotations
 import base64
 import binascii
 import importlib.util
-from typing import TYPE_CHECKING, Final, final
-
-from typing_extensions import override
+from typing import TYPE_CHECKING, Final, final, override
 
 from xtr_cache.exception import InvalidArgumentError, MarshallingError
 

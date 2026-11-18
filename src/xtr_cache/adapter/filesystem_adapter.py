@@ -9,10 +9,8 @@ import stat
 import tempfile
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Final, final
+from typing import TYPE_CHECKING, Final, final, override
 from urllib.parse import quote, unquote
-
-from typing_extensions import override
 
 from xtr_cache._digest import urlsafe_digest
 from xtr_cache.exception import InvalidArgumentError
@@ -334,7 +332,7 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
         stored_id, _, _ = rest.partition(b"\n")
         try:
             return float(expiry), unquote(stored_id.decode("ascii"))
-        except (UnicodeDecodeError, ValueError):
+        except UnicodeDecodeError, ValueError:
             return None
 
     @staticmethod
@@ -351,7 +349,7 @@ class FilesystemAdapter(AbstractAdapter, PruneableInterface):
             return None
         try:
             return float(expiry), unquote(stored_id.decode("ascii")), data
-        except (UnicodeDecodeError, ValueError):
+        except UnicodeDecodeError, ValueError:
             return None
 
 

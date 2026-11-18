@@ -4,10 +4,10 @@ from __future__ import annotations
 
 import pickle
 import sys
+from typing import override
 
 import pytest
 from redis.asyncio import Redis
-from typing_extensions import override
 
 from tests.support.fake_redis import FakeRedis
 from tests.support.pool_conformance import PoolTests

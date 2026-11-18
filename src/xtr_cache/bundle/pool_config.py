@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import TypeAlias
 
 from xtr_dependency_injection import Reference, one_or_many
 
@@ -13,7 +12,7 @@ from xtr_cache.exception import InvalidArgumentError
 
 __all__ = ["AdapterEntry", "PoolConfig"]
 
-AdapterEntry: TypeAlias = str | Reference
+type AdapterEntry = str | Reference
 """One adapter: a DSN or keyword :class:`~xtr_cache.adapter.AdapterFactory` reads, or a client."""
 
 

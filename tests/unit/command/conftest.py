@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 @pytest.fixture
-def pools(tmp_path: Path) -> Generator[CachePoolClearer, None, None]:
+def pools(tmp_path: Path) -> Generator[CachePoolClearer]:
     """Three pools — in memory, on disk, tag-aware — for every cache command to act on."""
     clearer = CachePoolClearer(
         {

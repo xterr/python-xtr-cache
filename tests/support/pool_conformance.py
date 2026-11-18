@@ -12,10 +12,9 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import timedelta
-from typing import TYPE_CHECKING, ClassVar, Self, final
+from typing import TYPE_CHECKING, ClassVar, Self, final, override
 
 import pytest
-from typing_extensions import override
 from xtr_clock.testing import mock_time
 
 from tests.support.callbacks import Computation

@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import threading
 from dataclasses import dataclass
+from typing import override
 
 import pytest
-from typing_extensions import override
 
 from xtr_cache import DefaultMarshaller, MarshallerInterface, MarshallingError
 

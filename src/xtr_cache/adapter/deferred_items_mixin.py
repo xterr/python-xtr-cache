@@ -5,9 +5,8 @@ from __future__ import annotations
 import asyncio
 import copy
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Self, final
+from typing import TYPE_CHECKING, Self, final, override
 
-from typing_extensions import override
 from xtr_cache_contracts import CacheItemPoolInterface
 
 from xtr_cache.cache_item import CacheItem

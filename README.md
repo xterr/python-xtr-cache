@@ -4,7 +4,7 @@
 
 **Cache pools in memory, in files, in Redis, chained or tag-aware — computed once, even under load.**
 
-<img alt="python 3.11+" src="https://img.shields.io/badge/python-%E2%89%A5%203.11-3776AB?logo=python&logoColor=white">
+<img alt="python 3.14+" src="https://img.shields.io/badge/python-%E2%89%A5%203.14-3776AB?logo=python&logoColor=white">
 <img alt="asyncio" src="https://img.shields.io/badge/asyncio-native-1f6feb">
 <img alt="typed" src="https://img.shields.io/badge/typed-ty%20%2B%20basedpyright-1f6feb">
 <img alt="license MIT" src="https://img.shields.io/badge/license-MIT-blue">
@@ -56,7 +56,7 @@ uv add xtr-cache xtr-dependency-injection  # + the container, for the CacheBundl
 uv add xtr-console                         # beside it: the cache:pool:* commands
 ```
 
-Requires Python 3.11+. Depends on `typing-extensions`, `xtr-cache-contracts`, `xtr-clock`,
+Requires Python 3.14.4+. Depends on `xtr-cache-contracts`, `xtr-clock`,
 `xtr-lock` and `xtr-logging-contracts` — not on the container: the bundle is used when
 [xtr-dependency-injection](../xtr-dependency-injection) is installed beside the package, never as
 an extra, and the pools work without it.

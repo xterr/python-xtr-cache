@@ -3,9 +3,7 @@
 from __future__ import annotations
 
 import pickle
-from typing import TYPE_CHECKING, cast, final
-
-from typing_extensions import override
+from typing import TYPE_CHECKING, cast, final, override
 
 from xtr_cache._text import safe_str
 from xtr_cache.exception.marshalling_error import MarshallingError
@@ -42,7 +40,7 @@ class DefaultMarshaller(MarshallerInterface):
         for key, value in values.items():
             try:
                 encoded[key] = pickle.dumps(value, protocol=pickle.HIGHEST_PROTOCOL)
-            except (pickle.PicklingError, TypeError, AttributeError, RecursionError):
+            except pickle.PicklingError, TypeError, AttributeError, RecursionError:
                 failed.append(key)
 
         return encoded, failed

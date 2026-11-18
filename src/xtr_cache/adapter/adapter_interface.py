@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, override, runtime_checkable
 
-from typing_extensions import override
 from xtr_cache_contracts import CacheInterface, CacheItemPoolInterface
 
 if TYPE_CHECKING:
