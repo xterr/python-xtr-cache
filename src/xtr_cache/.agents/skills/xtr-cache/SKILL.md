@@ -30,6 +30,9 @@ the pool logs why.
   dependency): activate `CacheBundle`, name pools in `CacheConfig`, inject `CacheInterface` for
   the `app` pool and `Annotated[CacheInterface, Target("name")]` for another. Without the
   container every pool works the same; only `xtr_cache.bundle` needs it.
+- Profiling: with xtr-http-kernel's profiler on (the web profiler turns it on in dev), the bundle
+  hands out every pool wrapped in a `TraceableAdapter` and registers the `cache` panel listing
+  each call a request made; type against the interfaces, never `isinstance(pool, ArrayAdapter)`.
 
 ## Cache a value
 

@@ -1,0 +1,212 @@
+{#
+  What the request asked of its cache pools, and what that cost.
+
+  The calls are kept, never the values: the panel says which pool was asked,
+  which keys were named, how many of the keys read were found and how long
+  each call took. A miss is not a failure — it is a value that had to be made
+  — so nothing here is marked as one; a hit ratio worth looking at is read
+  across many profiles, not in a single request. A key named like a
+  credential was kept as `******`.
+#}
+{% block toolbar %}
+{% from "@xtr_web_profiler/profiler/toolbar_item.html.j2" import toolbar_item %}
+{% set totals = collector.data.get("totals") or {} %}
+{% set hits = totals.get("hits") or 0 %}
+{% set misses = totals.get("misses") or 0 %}
+{% set keys_read = hits + misses %}
+{% set ratio %}{% if keys_read %}{{ (hits * 100 / keys_read)|round(1) }}%{% else %}n/a{% endif %}{% endset %}
+{% set icon %}
+<svg viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M8 1.8l5.6 2.8L8 7.4 2.4 4.6z"></path>
+  <path d="M2.4 8l5.6 2.8L13.6 8"></path>
+  <path d="M2.4 11.4l5.6 2.8 5.6-2.8"></path>
+</svg>
+<span class="xtr-toolbar-value">{{ totals.get("calls") or 0 }}</span>
+<span class="xtr-toolbar-sep">·</span>
+<span class="xtr-toolbar-value">{{ ratio }}</span>
+{% endset %}
+{% set text %}
+<dl class="xtr-toolbar-rows">
+  <dt>Calls</dt><dd>{{ totals.get("calls") or 0 }}</dd>
+  <dt>Reads</dt><dd>{{ totals.get("reads") or 0 }}</dd>
+  <dt>Hits</dt><dd>{{ hits }}</dd>
+  <dt>Misses</dt><dd>{{ misses }}</dd>
+  <dt>Hit ratio</dt><dd>{{ ratio }}</dd>
+  <dt>Writes</dt><dd>{{ totals.get("writes") or 0 }}</dd>
+  <dt>Deletes</dt><dd>{{ totals.get("deletes") or 0 }}</dd>
+  <dt>Time</dt><dd>{{ totals.get("duration_ms")|format_ms }}</dd>
+  <dt>Pools</dt><dd>{{ (collector.data.get("pools") or {})|length }}</dd>
+</dl>
+<p class="xtr-toolbar-note">The ratio is of the keys this one request read; a miss is a value that had to be made, not a failure.</p>
+{% endset %}
+{{ toolbar_item(collector.name, icon, text, link=panel_url(collector.name)) }}
+{% endblock %}
+
+{% block menu %}
+<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+  <path d="M8 1.8l5.6 2.8L8 7.4 2.4 4.6z"></path>
+  <path d="M2.4 8l5.6 2.8L13.6 8"></path>
+  <path d="M2.4 11.4l5.6 2.8 5.6-2.8"></path>
+</svg>
+<span class="xtr-menu-label">Cache</span>
+<span class="xtr-menu-count">{{ (collector.data.get("totals") or {}).get("calls") or 0 }}</span>
+{% endblock %}
+
+{% block panel %}
+{% set calls = collector.data.get("calls") or [] %}
+{% set totals = collector.data.get("totals") or {} %}
+{% set pools = collector.data.get("pools") or {} %}
+{% set hits = totals.get("hits") or 0 %}
+{% set misses = totals.get("misses") or 0 %}
+{% set found = [] %}
+{% set missed = [] %}
+{% for call in calls %}
+{% if (call.get("hits") or 0) > 0 %}
+{% set _ = found.append(call) %}
+{% endif %}
+{% if (call.get("misses") or 0) > 0 %}
+{% set _ = missed.append(call) %}
+{% endif %}
+{% endfor %}
+{% macro share(part, whole) %}{% if whole %}{{ (part * 100 / whole)|round(1) }}%{% else %}n/a{% endif %}{% endmacro %}
+{% macro call_rows(tag, rows, nothing) %}
+<div class="xtr-toolstrip">
+  <input class="xtr-filter" type="search" placeholder="Filter these calls…" aria-label="Filter the calls shown" data-xtr-filter="xtr-cache-{{ tag }}" data-xtr-filter-count="xtr-cache-{{ tag }}-count">
+  <span class="xtr-card-note" id="xtr-cache-{{ tag }}-count">{{ rows|length }} of {{ rows|length }}</span>
+</div>
+{% if rows %}
+<div class="xtr-scroll">
+  <table class="xtr-table" id="xtr-cache-{{ tag }}">
+    <thead>
+      <tr>
+        <th scope="col">Pool</th>
+        <th scope="col">Method</th>
+        <th scope="col">Keys</th>
+        <th scope="col">Found</th>
+        <th scope="col">Result</th>
+        <th scope="col">Took</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for call in rows %}
+      {% set call_hits = call.get("hits") or 0 %}
+      {% set call_keys = call_hits + (call.get("misses") or 0) %}
+      <tr>
+        <td class="xtr-cell-mono">{{ call.get("pool") or "—" }}</td>
+        <td class="xtr-cell-mono">{{ call.get("method") or "—" }}</td>
+        <td class="xtr-cell-mono xtr-break">{{ (call.get("keys") or [])|join(", ") or "—" }}</td>
+        <td class="xtr-cell-num">
+          {% if call_keys %}
+          {{ call_hits }} of {{ call_keys }}
+          {% else %}
+          —
+          {% endif %}
+        </td>
+        <td class="xtr-cell-tight">
+          {% if call.get("result") is none %}
+          <span class="xtr-dump-null">none</span>
+          {% elif call.get("result") %}
+          <span class="xtr-badge xtr-badge-green">yes</span>
+          {% else %}
+          <span class="xtr-badge">no</span>
+          {% endif %}
+        </td>
+        <td class="xtr-cell-num">{{ call.get("duration_ms")|format_ms }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
+<p class="xtr-empty">{{ nothing }}</p>
+{% endif %}
+{% endmacro %}
+<h1 class="xtr-panel-title">Cache</h1>
+<section class="xtr-card">
+  <div class="xtr-card-body">
+    <table class="xtr-table xtr-table-key">
+      <tbody>
+        <tr><td>Calls</td><td class="xtr-cell-mono">{{ totals.get("calls") or 0 }}</td></tr>
+        <tr><td>Reads</td><td class="xtr-cell-mono">{{ totals.get("reads") or 0 }}</td></tr>
+        <tr><td>Hits</td><td class="xtr-cell-mono">{{ hits }}</td></tr>
+        <tr><td>Misses</td><td class="xtr-cell-mono">{{ misses }}</td></tr>
+        <tr><td>Hit ratio</td><td class="xtr-cell-mono">{{ share(hits, hits + misses) }}</td></tr>
+        <tr><td>Writes</td><td class="xtr-cell-mono">{{ totals.get("writes") or 0 }}</td></tr>
+        <tr><td>Deletes</td><td class="xtr-cell-mono">{{ totals.get("deletes") or 0 }}</td></tr>
+        <tr><td>Time</td><td class="xtr-cell-mono">{{ totals.get("duration_ms")|format_ms }}</td></tr>
+      </tbody>
+    </table>
+    <p class="xtr-card-note">
+      A read asks for one or more keys; the hits and the misses count keys,
+      not calls, so a call for ten keys that found six is one read, six hits
+      and four misses. The ratio is this request's alone.
+    </p>
+  </div>
+</section>
+<section class="xtr-card">
+  <header class="xtr-card-head">
+    <h2 class="xtr-card-title">Pools</h2>
+    <span class="xtr-card-note">every pool this request reached</span>
+  </header>
+  <div class="xtr-card-body">
+    {% if pools %}
+    <div class="xtr-scroll">
+      <table class="xtr-table">
+        <thead>
+          <tr>
+            <th scope="col">Pool</th>
+            <th scope="col">Calls</th>
+            <th scope="col">Reads</th>
+            <th scope="col">Hits</th>
+            <th scope="col">Misses</th>
+            <th scope="col">Writes</th>
+            <th scope="col">Deletes</th>
+            <th scope="col">Time</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for name, pool in pools.items() %}
+          <tr>
+            <td class="xtr-cell-mono xtr-break">{{ name }}</td>
+            <td class="xtr-cell-num">{{ pool.get("calls") or 0 }}</td>
+            <td class="xtr-cell-num">{{ pool.get("reads") or 0 }}</td>
+            <td class="xtr-cell-num">{{ pool.get("hits") or 0 }}</td>
+            <td class="xtr-cell-num">{{ pool.get("misses") or 0 }}</td>
+            <td class="xtr-cell-num">{{ pool.get("writes") or 0 }}</td>
+            <td class="xtr-cell-num">{{ pool.get("deletes") or 0 }}</td>
+            <td class="xtr-cell-num">{{ pool.get("duration_ms")|format_ms }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p class="xtr-card-note">This request reached no pool, so none is listed. A pool is named here once it is called.</p>
+    {% endif %}
+  </div>
+</section>
+<section class="xtr-card xtr-card-flush xtr-tabs">
+  <div class="xtr-tablist" role="tablist" aria-label="Which calls to show">
+    <button type="button" class="xtr-tab xtr-on" data-xtr-tab="all" role="tab" aria-selected="true">All<span class="xtr-tab-count">{{ calls|length }}</span></button>
+    <button type="button" class="xtr-tab" data-xtr-tab="hits" role="tab" aria-selected="false">Hits<span class="xtr-tab-count">{{ found|length }}</span></button>
+    <button type="button" class="xtr-tab" data-xtr-tab="misses" role="tab" aria-selected="false">Misses<span class="xtr-tab-count">{{ missed|length }}</span></button>
+  </div>
+  <section class="xtr-pane xtr-pane-flush xtr-on" data-xtr-pane="all" role="tabpanel">
+    {{ call_rows("all", calls, "This request asked nothing of a cache.") }}
+  </section>
+  <section class="xtr-pane xtr-pane-flush" data-xtr-pane="hits" role="tabpanel">
+    {{ call_rows("hits", found, "No key this request read was already cached.") }}
+  </section>
+  <section class="xtr-pane xtr-pane-flush" data-xtr-pane="misses" role="tabpanel">
+    {{ call_rows("misses", missed, "Every key this request read was already cached.") }}
+  </section>
+  <p class="xtr-card-foot">
+    <span class="xtr-badge xtr-badge-green">yes</span> the write, the delete or
+    the clear went through.
+    <span class="xtr-badge">no</span> it did not, or there was nothing to do.
+    <span class="xtr-dump-null">none</span> a read, which returns no such
+    answer. A key named like a credential reads
+    <code class="xtr-mono">******</code>.
+  </p>
+</section>
+{% endblock %}

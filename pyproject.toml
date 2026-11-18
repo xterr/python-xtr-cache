@@ -49,6 +49,8 @@ dev = [
     "pytest-cov>=7.1",
     "anyio>=4.10",
     "ty>=0.0.83",
+    # The profiler panel's collector, tested against the http kernel's profiler.
+    "xtr-http-kernel>=7.0,<8",
     "pynacl>=1.6",
     "redis>=7.1",
     "xtr-console>=7.0,<8",

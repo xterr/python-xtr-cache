@@ -273,6 +273,23 @@ pool = RedisAdapter.from_url("redis://cache", "app", marshaller=SodiumMarshaller
 Keys rotate: the first encrypts, every one decrypts. Put the new key first and keep the old one
 until what it encrypted has expired.
 
+## Profiler panel
+
+With [xtr-http-kernel](../xtr-http-kernel)'s profiler on — the
+[web profiler](../xtr-web-profiler) turns it on in development — the bundle registers a `cache`
+collector, and the profile of each request shows every call it made to a pool, in order: the
+pool, the method (`get`, `get_item`, `save`, `invalidate_tags`…), the keys, the hits and misses,
+how long it took, and what a write or a delete returned. Totals follow, for the request and for
+each pool: calls, reads, hits, misses, writes, deletes and time spent. A `get` counts as a miss
+when its callback had to compute the value. Values are never kept, and a key named like a
+credential — a token, a secret, a password — is shown as `******`.
+
+To record the calls, every pool is handed out wrapped in a `TraceableAdapter` — a
+`TraceableTagAwareAdapter` for a pool with tags — that answers to the same interfaces and passes
+each call through; committing and closing at shutdown still act on the pool itself. The calls of
+concurrent requests are kept apart. With the profiler off nothing is wrapped and nothing
+registered: a pool costs exactly what it did.
+
 ## Use in an application
 
 Everything adding this package to an application on

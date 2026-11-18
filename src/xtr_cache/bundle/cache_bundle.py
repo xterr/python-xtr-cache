@@ -16,6 +16,9 @@ server reached. Boot checks the configuration without opening anything, so a
 mistake fails the application at startup rather than on its first cache read.
 A pool commits what it deferred, and closes a connection it opened, when the
 container closes; between messages, the kernel's resetter commits it.
+
+When the http kernel's bundle profiles requests, every pool is handed out
+traced, and a ``cache`` collector shows the calls each profiled request made.
 """
 
 from __future__ import annotations
@@ -138,8 +141,17 @@ class CacheBundle(Bundle[CacheConfig]):
         if config.stampede_lock is not None:
             _ = services.set(_lock_registry)
 
+        trace_pool: Callable[[str, AdapterInterface], AdapterInterface] | None = None
+        if bundle_active(builder, "http_kernel"):
+            from xtr_http_kernel.bundle import profiling_active  # noqa: PLC0415 — an optional peer
+
+            if profiling_active(builder):
+                from ._profiler import register_profiler  # noqa: PLC0415 — needs the optional peer
+
+                trace_pool = register_profiler(services)
+
         for name, pool in config.pool_configs().items():
-            factory = named_factory(_pool_factory(name), f"cache_pool_{name}")
+            factory = named_factory(_pool_factory(name, trace_pool), f"cache_pool_{name}")
             _ = services.set(factory, qualifier=name).add_tag(_RESET_TAG, method="reset")
             aliases = _POOL_INTERFACES + (_TAG_AWARE_INTERFACES if pool.tags else ())
             for alias in aliases:
@@ -254,11 +266,15 @@ def _provider(
 
 def _pool_factory(
     name: str,
+    trace_pool: Callable[[str, AdapterInterface], AdapterInterface] | None = None,
 ) -> Callable[[CacheConfig, ContainerInterface], AsyncIterator[AdapterInterface]]:
     """Build the factory of the pool called ``name``.
 
     It injects the configuration rather than closing over it: the container
     hands it a copy with every environment placeholder resolved.
+
+    ``trace_pool``, given while requests are profiled, wraps the pool handed
+    out; committing and closing at the end still act on the pool itself.
     """
 
     async def pool(
@@ -288,7 +304,7 @@ def _pool_factory(
             adapter.set_lock_registry(registry)
 
         try:
-            yield adapter
+            yield adapter if trace_pool is None else trace_pool(name, adapter)
         finally:
             try:
                 _ = await adapter.commit()
