@@ -1,6 +1,6 @@
 [project]
 name = "xtr-cache"
-version = "7.2.0"
+version = "7.3.0"
 description = "Cache pools in memory, in files, in Redis, chained or tag-aware, with stampede protection."
 readme = "README.md"
 requires-python = ">=3.14.4"
@@ -18,10 +18,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "xtr-cache-contracts>=7.2,<8",
-    "xtr-clock>=7.2,<8",
-    "xtr-lock>=7.2,<8",
-    "xtr-logging-contracts>=7.2,<8",
+    "xtr-cache-contracts>=7.3,<8",
+    "xtr-clock>=7.3,<8",
+    "xtr-lock>=7.3,<8",
+    "xtr-logging-contracts>=7.3,<8",
 ]
 
 [project.optional-dependencies]
@@ -50,13 +50,13 @@ dev = [
     "anyio>=4.10",
     "ty>=0.0.83",
     # The profiler panel's collector, tested against the http kernel's profiler.
-    "xtr-http-kernel>=7.2,<8",
+    "xtr-http-kernel>=7.3,<8",
     "pynacl>=1.6",
     "redis>=7.1",
-    "xtr-console>=7.2,<8",
-    "xtr-dependency-injection>=7.2,<8",
-    "xtr-logging>=7.2,<8",
-    "xtr-service-contracts>=7.2,<8",
+    "xtr-console>=7.3,<8",
+    "xtr-dependency-injection>=7.3,<8",
+    "xtr-logging>=7.3,<8",
+    "xtr-service-contracts>=7.3,<8",
 ]
 
 [build-system]
